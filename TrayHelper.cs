@@ -40,6 +40,7 @@ class TrayHelper : ApplicationContext {
   [DllImport("user32",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h,StringBuilder s,int n);
   [DllImport("user32")] static extern bool GetWindowRect(IntPtr h,out RECT r);
   [DllImport("user32")] static extern IntPtr GetForegroundWindow();
+  [DllImport("user32",CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string c,string t);
   [DllImport("user32")] static extern bool PostMessage(IntPtr h,uint m,IntPtr w,IntPtr l);
   [DllImport("user32")] static extern bool SetProcessDpiAwarenessContext(IntPtr c);
   [DllImport("user32")] static extern bool SetProcessDPIAware();
@@ -52,7 +53,7 @@ class TrayHelper : ApplicationContext {
 
   sealed class UiWin:NativeWindow{ readonly TrayHelper o; public UiWin(TrayHelper o){ this.o=o; }
     public void Open(){ var cp=new CreateParams(); cp.Caption="TrayHelper.msg"; cp.Parent=new IntPtr(-3); CreateHandle(cp); }
-    protected override void WndProc(ref Message m){ if(m.Msg==WM_HIDE){ try{ o.OnUiHide(); }catch{ o.hookFault=true; } } base.WndProc(ref m); } }
+    protected override void WndProc(ref Message m){ if(m.Msg==0x8002){ try{ o.ShowSettings(); }catch{} } if(m.Msg==WM_HIDE){ try{ o.OnUiHide(); }catch{ o.hookFault=true; } } base.WndProc(ref m); } }
 
   NotifyIcon tray; ContextMenuStrip menu; System.Windows.Forms.Timer timer; UiWin ui; Icon ownedIcon;
   IntPtr uiHwnd, mHook, kHook; HookProc mProc,kProc; SynchronizationContext sync;
@@ -104,7 +105,7 @@ class TrayHelper : ApplicationContext {
     menu.Items.Add("Exit (restore windows)",null,(s,e)=>ExitHelper());
   }
   SettingsForm settings;
-  void ShowSettings(){ if(settings==null||settings.IsDisposed) settings=new SettingsForm(this); settings.Show(); settings.WindowState=FormWindowState.Normal; settings.Activate(); settings.RefreshRows(); }
+  public void ShowSettings(){ if(settings==null||settings.IsDisposed) settings=new SettingsForm(this); settings.Show(); settings.WindowState=FormWindowState.Normal; settings.Activate(); settings.RefreshRows(); }
   // ---- API used by SettingsForm ----
   public List<AppTarget> AppList{ get{ return Apps; } }
   public void SetEnabled(AppTarget a,bool on){ a.Enabled=on; if(!on) a.snap=null; SaveAll(); Log(a.Name+": enabled="+on); }
@@ -244,7 +245,7 @@ class TrayHelper : ApplicationContext {
     try{ Dir=Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName); }catch{}
     if(string.IsNullOrEmpty(Dir)) Dir=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
     IniPath=Path.Combine(Dir,"tray-helper.ini"); if(!File.Exists(IniPath)){ var g=new AppTarget(); g.Name="Grok Bot"; g.ExePath=Environment.ExpandEnvironmentVariables("%LOCALAPPDATA%\\Programs\\Grok Bot\\Grok Bot.exe"); g.ProcName="Grok Bot"; g.WinTitle="Grok Bot"; g.WinClass="Chrome_WidgetWin_1"; g.Watchdog=true; Apps.Add(g); SaveAll(); } LoadConfig();
-    bool created; var mx=new Mutex(true,"Local\\TrayHelper",out created); if(!created){ mx.Dispose(); return; }
+    bool created; var mx=new Mutex(true,"Local\\TrayHelper",out created); if(!created){ mx.Dispose(); var w=FindWindow(null,"TrayHelper.msg"); if(w!=IntPtr.Zero) PostMessage(w,0x8002,IntPtr.Zero,IntPtr.Zero); return; } // 2nd launch opens settings
     try{ Application.EnableVisualStyles(); Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
       Application.ThreadException+=delegate(object s,ThreadExceptionEventArgs e){ Log("ui "+e.Exception.Message); };
       Application.Run(new TrayHelper()); }finally{ mx.Dispose(); } }
