@@ -6,13 +6,13 @@ using Microsoft.Win32;
 static class Theme{
   public static bool Dark;
   public static ResourceDictionary Res;
-  public static Brush Bg, Card, Border, Text, Sub, Accent, Hover;
+  public static Brush Bg, Card, Line, Text, Sub, Accent, Hover;
   static Brush B(string hex){ var b=(Brush)new BrushConverter().ConvertFromString(hex); b.Freeze(); return b; }
   public static void Init(){
     if(Res!=null) return;
     try{ using(var k=Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")){ var v=k==null?null:k.GetValue("AppsUseLightTheme"); Dark=v is int&&(int)v==0; } }catch{}
     string bg=Dark?"#202020":"#F3F3F3", card=Dark?"#2B2B2B":"#FFFFFF", border=Dark?"#3A3A3A":"#E3E3E3", text=Dark?"#FFFFFF":"#1B1B1B", sub=Dark?"#A8A8A8":"#616161", acc=Dark?"#7B8CFF":"#4F46E5", knobOn=Dark?"#101010":"#FFFFFF", hover=Dark?"#353535":"#F0F0F0", btn=Dark?"#373737":"#FBFBFB";
-    Bg=B(bg); Card=B(card); Border=B(border); Text=B(text); Sub=B(sub); Accent=B(acc); Hover=B(hover);
+    Bg=B(bg); Card=B(card); Line=B(border); Text=B(text); Sub=B(sub); Accent=B(acc); Hover=B(hover);
     var x=@"<ResourceDictionary xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
   <Style x:Key='Switch' TargetType='ToggleButton'>
     <Setter Property='Cursor' Value='Hand'/><Setter Property='Focusable' Value='False'/>
@@ -69,7 +69,7 @@ static class Theme{
   public static TextBlock T(string s,double size,Brush fg,FontWeight w){ var t=new TextBlock(); t.Text=s; t.FontSize=size; t.Foreground=fg; t.FontWeight=w; t.FontFamily=Font; t.TextTrimming=TextTrimming.CharacterEllipsis; t.VerticalAlignment=VerticalAlignment.Center; return t; }
   public static TextBlock Glyph(string g,double size,Brush fg){ var t=new TextBlock(); t.Text=g; t.FontFamily=Icons; t.FontSize=size; t.Foreground=fg; t.VerticalAlignment=VerticalAlignment.Center; return t; }
   public static ToggleButton Switch(bool on){ var t=new ToggleButton(); t.Style=(Style)Res["Switch"]; t.IsChecked=on; t.VerticalAlignment=VerticalAlignment.Center; return t; }
-  public static Button Button(object content,string style){ var b=new Button(); b.Content=content; b.Style=(Style)Res[style]; b.VerticalAlignment=VerticalAlignment.Center; return b; }
+  public static Button MkBtn(object content,string style){ var b=new Button(); b.Content=content; b.Style=(Style)Res[style]; b.VerticalAlignment=VerticalAlignment.Center; return b; }
   static readonly Dictionary<string,ImageSource> iconCache=new Dictionary<string,ImageSource>(StringComparer.OrdinalIgnoreCase);
   public static ImageSource AppIcon(string exe){
     if(string.IsNullOrEmpty(exe)) return Logo;
@@ -97,15 +97,15 @@ partial class TrayHelper{
       flyout.SizeChanged+=(s,e)=>PlaceFlyout();
       Interop(flyout);
     }
-    var outer=new Border(); outer.Margin=new Thickness(12); outer.CornerRadius=new CornerRadius(8); outer.Background=Theme.Bg; outer.BorderBrush=Theme.Border; outer.BorderThickness=new Thickness(1);
+    var outer=new Border(); outer.Margin=new Thickness(12); outer.CornerRadius=new CornerRadius(8); outer.Background=Theme.Bg; outer.BorderBrush=Theme.Line; outer.BorderThickness=new Thickness(1);
     outer.Effect=new DropShadowEffect{ BlurRadius=16, ShadowDepth=2, Opacity=0.35, Direction=270 };
     var st=new StackPanel(); st.Margin=new Thickness(16,14,16,10); outer.Child=st;
     var head=new DockPanel(); head.Margin=new Thickness(0,0,0,10);
-    var gear=Theme.Button(Theme.Glyph("\uE713",15,Theme.Sub),"Link"); gear.ToolTip="Settings"; gear.Click+=(s,e)=>{ flyout.Hide(); ShowSettings(); }; DockPanel.SetDock(gear,Dock.Right); head.Children.Add(gear);
+    var gear=Theme.MkBtn(Theme.Glyph("\uE713",15,Theme.Sub),"Link"); gear.ToolTip="Settings"; gear.Click+=(s,e)=>{ flyout.Hide(); ShowSettings(); }; DockPanel.SetDock(gear,Dock.Right); head.Children.Add(gear);
     var hl=new StackPanel(); hl.Orientation=Orientation.Horizontal; hl.Children.Add(Theme.Img(Theme.Logo,20)); var ht=Theme.T("TrayHelper",15,Theme.Text,FontWeights.SemiBold); ht.Margin=new Thickness(8,0,0,0); hl.Children.Add(ht); head.Children.Add(hl);
     st.Children.Add(head);
     var cap=Theme.T("Close to tray",12,Theme.Sub,FontWeights.Normal); cap.Margin=new Thickness(2,0,0,6); st.Children.Add(cap);
-    var list=new Border(); list.CornerRadius=new CornerRadius(6); list.Background=Theme.Card; list.BorderBrush=Theme.Border; list.BorderThickness=new Thickness(1);
+    var list=new Border(); list.CornerRadius=new CornerRadius(6); list.Background=Theme.Card; list.BorderBrush=Theme.Line; list.BorderThickness=new Thickness(1);
     var rows=new StackPanel(); list.Child=rows; bool first=true;
     foreach(var a0 in Visible()){ var a=a0;
       var row=new Grid(); row.Margin=new Thickness(12,9,12,9);
@@ -116,13 +116,13 @@ partial class TrayHelper{
       var sw=Theme.Switch(a.Enabled); sw.Click+=(s,e)=>SetEnabled(a,sw.IsChecked==true); Grid.SetColumn(sw,2); row.Children.Add(sw);
       var wrap=new Border(); wrap.Child=row; wrap.Background=Brushes.Transparent; wrap.Cursor=System.Windows.Input.Cursors.Hand; wrap.ToolTip="Click to show "+a.Name;
       tx.MouseLeftButtonUp+=(s,e)=>{ flyout.Hide(); ShowApp(a); };
-      if(!first){ wrap.BorderBrush=Theme.Border; wrap.BorderThickness=new Thickness(0,1,0,0); } first=false;
+      if(!first){ wrap.BorderBrush=Theme.Line; wrap.BorderThickness=new Thickness(0,1,0,0); } first=false;
       rows.Children.Add(wrap); }
     if(first){ var none=Theme.T("No supported apps found.",13,Theme.Sub,FontWeights.Normal); none.Margin=new Thickness(12); rows.Children.Add(none); }
     st.Children.Add(list);
     var foot=new DockPanel(); foot.Margin=new Thickness(0,8,0,0);
-    var exit=Theme.Button(Theme.T("Exit",12.5,Theme.Sub,FontWeights.Normal),"Link"); exit.ToolTip="Exit TrayHelper (hidden windows are restored)"; exit.Click+=(s,e)=>{ flyout.Hide(); ExitHelper(); }; DockPanel.SetDock(exit,Dock.Right); foot.Children.Add(exit);
-    var more=Theme.Button(Theme.T("Open settings",12.5,Theme.Accent,FontWeights.Normal),"Link"); more.Click+=(s,e)=>{ flyout.Hide(); ShowSettings(); }; more.HorizontalAlignment=HorizontalAlignment.Left; foot.Children.Add(more);
+    var exit=Theme.MkBtn(Theme.T("Exit",12.5,Theme.Sub,FontWeights.Normal),"Link"); exit.ToolTip="Exit TrayHelper (hidden windows are restored)"; exit.Click+=(s,e)=>{ flyout.Hide(); ExitHelper(); }; DockPanel.SetDock(exit,Dock.Right); foot.Children.Add(exit);
+    var more=Theme.MkBtn(Theme.T("Open settings",12.5,Theme.Accent,FontWeights.Normal),"Link"); more.Click+=(s,e)=>{ flyout.Hide(); ShowSettings(); }; more.HorizontalAlignment=HorizontalAlignment.Left; foot.Children.Add(more);
     st.Children.Add(foot);
     flyout.Content=outer;
     flyout.Show(); PlaceFlyout(); flyout.Activate();
@@ -161,13 +161,13 @@ sealed class SettingsWindow:Window{
     var sp=new StackPanel(); sp.Orientation=Orientation.Horizontal; sp.Children.Add(Theme.Glyph(glyph,16,Theme.Text)); var t=Theme.T(text,14,Theme.Text,FontWeights.Normal); t.Margin=new Thickness(12,0,0,0); sp.Children.Add(t); r.Content=sp;
     r.Checked+=(s,e)=>Rebuild(); return r; }
   public void Rebuild(){ statusLabels.Clear(); if(navGeneral.IsChecked==true) page.Content=GeneralPage(); else if(navAbout.IsChecked==true) page.Content=AboutPage(); else page.Content=AppsPage(); }
-  static Border Card(UIElement child){ var b=new Border(); b.CornerRadius=new CornerRadius(6); b.Background=Theme.Card; b.BorderBrush=Theme.Border; b.BorderThickness=new Thickness(1); b.Padding=new Thickness(16,12,16,12); b.Margin=new Thickness(0,0,0,4); b.Child=child; return b; }
+  static Border Card(UIElement child){ var b=new Border(); b.CornerRadius=new CornerRadius(6); b.Background=Theme.Card; b.BorderBrush=Theme.Line; b.BorderThickness=new Thickness(1); b.Padding=new Thickness(16,12,16,12); b.Margin=new Thickness(0,0,0,4); b.Child=child; return b; }
   static StackPanel Header(string title,string sub){ var s=new StackPanel(); s.Margin=new Thickness(0,0,0,16); s.Children.Add(Theme.T(title,26,Theme.Text,FontWeights.SemiBold)); var d=Theme.T(sub,13,Theme.Sub,FontWeights.Normal); d.TextWrapping=TextWrapping.Wrap; d.Margin=new Thickness(0,4,0,0); s.Children.Add(d); return s; }
   UIElement AppsPage(){
     var st=new StackPanel(); st.Children.Add(Header("Apps","Supported apps found on this PC. Turn on \"Close to tray\" and the X button / Alt+F4 hides the window instead of quitting, so the app keeps running in the background."));
     var bar=new StackPanel(); bar.Orientation=Orientation.Horizontal; bar.Margin=new Thickness(0,0,0,12);
-    var add=Theme.Button("Add app…","Accent"); add.Click+=(s,e)=>AddApp(); bar.Children.Add(add);
-    var scan=Theme.Button("Rescan","Btn"); scan.Margin=new Thickness(8,0,0,0); scan.Click+=(s,e)=>{ try{ Catalog.Merge(TrayHelper.Apps); TrayHelper.SaveAll(); }catch{} Rebuild(); }; bar.Children.Add(scan);
+    var add=Theme.MkBtn("Add app…","Accent"); add.Click+=(s,e)=>AddApp(); bar.Children.Add(add);
+    var scan=Theme.MkBtn("Rescan","Btn"); scan.Margin=new Thickness(8,0,0,0); scan.Click+=(s,e)=>{ try{ Catalog.Merge(TrayHelper.Apps); TrayHelper.SaveAll(); }catch{} Rebuild(); }; bar.Children.Add(scan);
     st.Children.Add(bar);
     foreach(var a0 in TrayHelper.Apps.Where(x=>x.Detected||!x.Preset).ToList()){ var a=a0;
       var g=new Grid(); foreach(var w in new[]{GridLength.Auto,new GridLength(1,GridUnitType.Star),GridLength.Auto,GridLength.Auto,GridLength.Auto}) g.ColumnDefinitions.Add(new ColumnDefinition{Width=w});
@@ -175,7 +175,7 @@ sealed class SettingsWindow:Window{
       var tx=new StackPanel(); tx.Margin=new Thickness(14,0,12,0); tx.VerticalAlignment=VerticalAlignment.Center;
       tx.Children.Add(Theme.T(a.Name+(a.Preset?"":"  (custom)"),14,Theme.Text,FontWeights.Normal)); var stt=Theme.T(Theme.StatusText(a),12,Theme.Sub,FontWeights.Normal); statusLabels[a]=stt; tx.Children.Add(stt);
       Grid.SetColumn(tx,1); g.Children.Add(tx);
-      var show=Theme.Button("Show","Btn"); show.Click+=(s,e)=>th.Show_(a); show.Margin=new Thickness(0,0,16,0); Grid.SetColumn(show,2); g.Children.Add(show);
+      var show=Theme.MkBtn("Show","Btn"); show.Click+=(s,e)=>th.Show_(a); show.Margin=new Thickness(0,0,16,0); Grid.SetColumn(show,2); g.Children.Add(show);
       var wd=Labeled("Watchdog",a.Watchdog,v=>th.SetWatchdog(a,v)); wd.ToolTip="Relaunch hidden if the app closes unexpectedly"; wd.Margin=new Thickness(0,0,18,0); Grid.SetColumn(wd,3); g.Children.Add(wd);
       var ct=Labeled("Close to tray",a.Enabled,v=>th.SetEnabled(a,v)); Grid.SetColumn(ct,4); g.Children.Add(ct);
       var card=Card(g);
@@ -187,9 +187,9 @@ sealed class SettingsWindow:Window{
     var t=Theme.T(label,12.5,Theme.Sub,FontWeights.Normal); t.Margin=new Thickness(0,0,10,0); sp.Children.Add(t); var sw=Theme.Switch(on); sw.Click+=(s,e)=>set(sw.IsChecked==true); sp.Children.Add(sw); return sp; }
   UIElement GeneralPage(){ var st=new StackPanel(); st.Children.Add(Header("General","Startup and configuration."));
     st.Children.Add(Row("Start with Windows","Launch TrayHelper in the tray when you sign in.",Labeled("",TrayHelper.StartWithWindows,v=>TrayHelper.StartWithWindows=v)));
-    var open=Theme.Button("Open folder","Btn"); open.Click+=(s,e)=>{ try{ Process.Start("explorer.exe","/select,\""+TrayHelper.IniPath+"\""); }catch{} };
+    var open=Theme.MkBtn("Open folder","Btn"); open.Click+=(s,e)=>{ try{ Process.Start("explorer.exe","/select,\""+TrayHelper.IniPath+"\""); }catch{} };
     st.Children.Add(Row("Config file",TrayHelper.IniPath,open));
-    var log=Theme.Button("Open log","Btn"); log.Click+=(s,e)=>{ try{ Process.Start(Path.Combine(TrayHelper.Dir,"tray-helper.log")); }catch{} };
+    var log=Theme.MkBtn("Open log","Btn"); log.Click+=(s,e)=>{ try{ Process.Start(Path.Combine(TrayHelper.Dir,"tray-helper.log")); }catch{} };
     st.Children.Add(Row("Log","tray-helper.log next to the exe",log));
     return st; }
   static Border Row(string title,string sub,UIElement right){ var g=new Grid(); g.ColumnDefinitions.Add(new ColumnDefinition()); g.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
@@ -227,9 +227,9 @@ sealed class PickerWindow:Window{
     var hd=new StackPanel(); hd.Margin=new Thickness(0,0,0,12); hd.Children.Add(Theme.T("Pick a running window",20,Theme.Text,FontWeights.SemiBold)); var sub=Theme.T("TrayHelper fills in process, window class, title and launch path automatically.",12.5,Theme.Sub,FontWeights.Normal); sub.TextWrapping=TextWrapping.Wrap; hd.Children.Add(sub);
     DockPanel.SetDock(hd,Dock.Top); dp.Children.Add(hd);
     var btns=new StackPanel(); btns.Orientation=Orientation.Horizontal; btns.HorizontalAlignment=HorizontalAlignment.Right; btns.Margin=new Thickness(0,12,0,0);
-    var ok=Theme.Button("Add","Accent"); ok.Click+=(s,e)=>Pick(); var cancel=Theme.Button("Cancel","Btn"); cancel.Margin=new Thickness(8,0,0,0); cancel.Click+=(s,e)=>{ DialogResult=false; };
+    var ok=Theme.MkBtn("Add","Accent"); ok.Click+=(s,e)=>Pick(); var cancel=Theme.MkBtn("Cancel","Btn"); cancel.Margin=new Thickness(8,0,0,0); cancel.Click+=(s,e)=>{ DialogResult=false; };
     btns.Children.Add(ok); btns.Children.Add(cancel); DockPanel.SetDock(btns,Dock.Bottom); dp.Children.Add(btns);
-    list=new ListBox(); list.Background=Theme.Card; list.BorderBrush=Theme.Border; list.Foreground=Theme.Text; list.MouseDoubleClick+=(s,e)=>Pick(); dp.Children.Add(list);
+    list=new ListBox(); list.Background=Theme.Card; list.BorderBrush=Theme.Line; list.Foreground=Theme.Text; list.MouseDoubleClick+=(s,e)=>Pick(); dp.Children.Add(list);
     Content=dp; Fill(); }
   void Fill(){ int me=Process.GetCurrentProcess().Id;
     EnumWindows((h,l)=>{ if(!IsWindowVisible(h)||GetWindow(h,4)!=IntPtr.Zero) return true;
