@@ -5,7 +5,7 @@ using System.Runtime.InteropServices; using System.Text; using System.Threading;
 
 sealed class CloseSnap{ public readonly int l,t,r,b; public CloseSnap(int l,int t,int r,int b){ this.l=l; this.t=t; this.r=r; this.b=b; } }
 
-sealed class AppTarget{
+sealed class AppTarget{ public bool geoLogged;
   public string Name, ExePath, ProcName, WinClass, WinTitle, IconExe, Note; public bool Enabled=true, Watchdog=true, Preset, Detected=true, NativeTray, gaveUp, AlwaysRestart, RestartOnCrash, Native, Notified, Geometric;
   public string Id, Hint, SettingsKeys; public bool CtrlQ, CtrlW; public bool IsGrok{ get{ return Id=="grokbot"; } }
   public volatile bool moved; public NotifyIcon Tray; public Icon TrayIcon; public Process mainProc; public List<DateTime> relaunches=new List<DateTime>(); public DateTime nextTry=DateTime.MinValue;
@@ -18,7 +18,7 @@ sealed class AppTarget{
 }
 
 partial class TrayHelper : ApplicationContext {
-  internal static long MaxLogBytes=256*1024; internal static int StartDelay=0; internal static List<string> Exclude=new List<string>{"chrome","msedge","firefox","explorer","TrayHelper","Grok Bot","ShellExperienceHost","SearchHost","StartMenuExperienceHost","TextInputHost","LockApp"}; internal static bool NotifyFirstHide=true, LogVerbose=false; const int WM_HIDE=0x8001;
+  internal static bool OpenMaximized=true; internal static double WinW=0,WinH=0; internal static long MaxLogBytes=256*1024; internal static int StartDelay=0; internal static List<string> Exclude=new List<string>{"Raycast","chrome","msedge","firefox","explorer","TrayHelper","Grok Bot","ShellExperienceHost","SearchHost","StartMenuExperienceHost","TextInputHost","LockApp"}; internal static bool NotifyFirstHide=true, LogVerbose=false; const int WM_HIDE=0x8001;
   const int SM_CXSIZE=30, SM_CYSIZE=31, SM_CXFRAME=32, SM_CYFRAME=33, SM_CXPADDEDBORDER=92;
   internal static string Dir, IniPath, dpiMode="unaware"; static int MyPid;
   internal static List<AppTarget> Apps=new List<AppTarget>();
@@ -78,7 +78,7 @@ partial class TrayHelper : ApplicationContext {
         if(s.StartsWith("App:",StringComparison.OrdinalIgnoreCase)){ cur=new AppTarget(); cur.Name=s.Substring(4).Trim(); cur.ProcName=cur.Name; cur.WinTitle=cur.Name; cur.WinClass="Chrome_WidgetWin_1"; Apps.Add(cur); }
         continue; }
       if(cur==null&&inGeneral){ int gi=line.IndexOf('='); if(gi<1) continue; var gk=line.Substring(0,gi).Trim().ToLowerInvariant(); var gv=line.Substring(gi+1).Trim(); int n;
-        if(gk=="exclude"){ Exclude=new List<string>(gv.Split(new[]{','},StringSplitOptions.RemoveEmptyEntries).Select(x=>x.Trim())); } else if(gk=="startdelay"&&int.TryParse(gv,out n)) StartDelay=n; else if(gk=="notifyfirsthide") NotifyFirstHide=ParseBool(gv); else if(gk=="loglevel") LogVerbose=gv.Equals("verbose",StringComparison.OrdinalIgnoreCase); else if(gk=="maxlogkb"&&int.TryParse(gv,out n)) MaxLogBytes=Math.Max(32,n)*1024L; continue; }
+        if(gk=="exclude"){ Exclude=new List<string>(gv.Split(new[]{','},StringSplitOptions.RemoveEmptyEntries).Select(x=>x.Trim())); } else if(gk=="startdelay"&&int.TryParse(gv,out n)) StartDelay=n; else if(gk=="notifyfirsthide"||gk=="notifications") NotifyFirstHide=ParseBool(gv); else if(gk=="settingsopen") OpenMaximized=!gv.Equals("last",StringComparison.OrdinalIgnoreCase); else if(gk=="settingssize"){ var pp=gv.Split('x'); double w,hh; if(pp.Length==2&&double.TryParse(pp[0],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out w)&&double.TryParse(pp[1],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out hh)){ WinW=w; WinH=hh; } } else if(gk=="loglevel") LogVerbose=gv.Equals("verbose",StringComparison.OrdinalIgnoreCase); else if(gk=="maxlogkb"&&int.TryParse(gv,out n)) MaxLogBytes=Math.Max(32,n)*1024L; continue; }
       if(cur==null) continue;
       int i=line.IndexOf('='); if(i<1) continue; var k=line.Substring(0,i).Trim().ToLowerInvariant(); var v=Environment.ExpandEnvironmentVariables(line.Substring(i+1).Trim());
       if(k=="enabled") cur.Enabled=ParseBool(v); else if(k=="watchdog") cur.Watchdog=ParseBool(v); else if(k=="interceptctrlq") cur.CtrlQ=ParseBool(v); else if(k=="interceptctrlw") cur.CtrlW=ParseBool(v); else if(k=="order"){} else if(k=="notified") cur.Notified=ParseBool(v); else if(k=="id") cur.Id=v; else if(k=="geometric") cur.Geometric=ParseBool(v);
@@ -124,7 +124,7 @@ partial class TrayHelper : ApplicationContext {
   internal static void SaveAll(){ try{ var sb=new StringBuilder();
     sb.AppendLine("; TrayHelper config. One [App:Name] section per app. Edited by the settings window.");
     sb.AppendLine("; ExePath may be a normal exe or shell:AppsFolder\\<AUMID> for Store/MSIX apps.");
-    sb.AppendLine(); sb.AppendLine("[General]"); sb.AppendLine("Exclude="+string.Join(",",Exclude));
+    sb.AppendLine(); sb.AppendLine("[General]"); sb.AppendLine("Exclude="+string.Join(",",Exclude)); sb.AppendLine("Notifications="+(NotifyFirstHide?"true":"false")); sb.AppendLine("SettingsOpen="+(OpenMaximized?"maximized":"last")); if(WinW>0) sb.AppendLine("SettingsSize="+((int)WinW)+"x"+((int)WinH));
     foreach(var a in Apps){ sb.AppendLine(); sb.AppendLine("[App:"+a.Name+"]"); if(a.Id!=null) sb.AppendLine("Id="+a.Id); if(a.CtrlQ) sb.AppendLine("InterceptCtrlQ=true"); if(a.CtrlW) sb.AppendLine("InterceptCtrlW=true"); if(a.Notified) sb.AppendLine("Notified=true"); if(a.Geometric) sb.AppendLine("Geometric=true"); sb.AppendLine("Enabled="+(a.Enabled?"true":"false"));
       sb.AppendLine("ExePath="+(a.ExePath??"")); sb.AppendLine("ProcessName="+a.ProcName); sb.AppendLine("WindowClass="+a.WinClass); sb.AppendLine("WindowTitle="+a.WinTitle); }
     File.WriteAllText(IniPath,sb.ToString()); }catch(Exception ex){ Log("save ini "+ex.Message); } }
@@ -193,6 +193,13 @@ partial class TrayHelper : ApplicationContext {
     // Only arm when the app's X button is really on top at that spot (another window, e.g. our own settings, may cover it).
     var cp=new POINT(); cp.x=(l+r)/2; cp.y=Math.Max(t,(t+b)/2); var top=WindowFromPoint(cp); if(top==IntPtr.Zero||GetAncestor(top,2)!=a.hwnd){ a.snap=null; return; }
     var p=a.snap; if(p!=null&&p.l==l&&p.t==t&&p.r==r&&p.b==b) return; a.snap=new CloseSnap(l,t,r,b); if(LogVerbose) Log(a.Name+": closeRect="+l+","+t+","+r+","+b); }
+  static readonly string[] OfficeCls={"XLMAIN","OpusApp","PPTFrameClass","rctrl_renwnd32","OMain","Framework::CFrame"};
+  static bool Office(AppTarget a){ return a.WinClass!=null&&Array.IndexOf(OfficeCls,a.WinClass)>=0; }
+  [DllImport("dwmapi")] static extern int DwmGetWindowAttribute(IntPtr h,int a,out RECT v,int s);
+  [DllImport("user32")] static extern IntPtr MonitorFromWindow(IntPtr h,uint f);
+  [StructLayout(LayoutKind.Sequential)] struct MONINFO{ public int cb; public RECT mon, work; public uint flags; }
+  [DllImport("user32")] static extern bool GetMonitorInfo(IntPtr m,ref MONINFO mi);
+  static int MonLeftTop(IntPtr h,bool left){ var mi=new MONINFO(); mi.cb=Marshal.SizeOf(typeof(MONINFO)); if(!GetMonitorInfo(MonitorFromWindow(h,2),ref mi)) return int.MinValue; return left?mi.work.l:mi.work.t; }
   void UpdateCloseRect(AppTarget a){
     RECT rc; IntPtr h=a.hwnd; if(!GetWindowRect(h,out rc)||rc.r<=rc.l||rc.b<=rc.t){ a.snap=null; return; }
     uint dpi=WinDpi(h); int bw=Math.Max(1,Metric(SM_CXSIZE,dpi)), bh=Math.Max(1,Metric(SM_CYSIZE,dpi)), fx=Math.Max(0,Metric(SM_CXFRAME,dpi)), fy=Math.Max(0,Metric(SM_CYFRAME,dpi)), pad=Math.Max(0,Metric(SM_CXPADDEDBORDER,dpi));
@@ -204,7 +211,10 @@ partial class TrayHelper : ApplicationContext {
     if(hR!=int.MinValue){ int mid=(hL+hR)/2, btm=hY;
       int vEnd=Math.Max(hY+bh+fy+pad,rc.t+(int)(64*dpi/96)), vp=0; for(int yy=hY;yy<vEnd;yy+=step){ if(++vp>24||sw.ElapsedMilliseconds>=60||!Fits16(mid)||!Fits16(yy)) break; if(Hit(h,mid,yy)==20) btm=yy; else break; }
       a.aL=rc.l; a.aT=rc.t; a.aR=rc.r; a.aB=rc.b; Publish(a,hL-2,rc.t,rc.r,btm+3); return; }
-    if(a.Geometric){ int gw=(int)(46*dpi/96), gh=(int)(32*dpi/96), top=Math.Max(rc.t,rc.t+fy+pad-(IsZoomed(h)?fy+pad:0)); a.aL=rc.l; a.aT=rc.t; a.aR=rc.r; a.aB=rc.b; Publish(a,rc.r-gw-(IsZoomed(h)?fx+pad:0),rc.t,rc.r,top+gh+(IsZoomed(h)?fy+pad:0)); return; }
+    if(a.Geometric||Office(a)||sawFit){ RECT vf; if(DwmGetWindowAttribute(h,9,out vf,Marshal.SizeOf(typeof(RECT)))!=0) vf=rc; bool z=IsZoomed(h); int gw=(int)(46*dpi/96), gh=(int)((Office(a)?40:32)*dpi/96), top=z?Math.Max(vf.t,0):vf.t;
+      if(z){ top=Math.Max(vf.t,MonLeftTop(h,false)); }
+      a.aL=rc.l; a.aT=rc.t; a.aR=rc.r; a.aB=rc.b; if(LogVerbose||!a.geoLogged){ a.geoLogged=true; Log(a.Name+": no HTCLOSE from hit-test, using caption geometry"); } Publish(a,vf.r-gw,top,vf.r,top+gh); return; }
+    if(false){ int gw=(int)(46*dpi/96), gh=(int)(32*dpi/96), top=Math.Max(rc.t,rc.t+fy+pad-(IsZoomed(h)?fy+pad:0)); a.aL=rc.l; a.aT=rc.t; a.aR=rc.r; a.aB=rc.b; Publish(a,rc.r-gw-(IsZoomed(h)?fx+pad:0),rc.t,rc.r,top+gh+(IsZoomed(h)?fy+pad:0)); return; }
     if(!sawFit){ int w2=Math.Max(bw,20*(int)dpi/96), h2=Math.Max(bh+fy+pad,16*(int)dpi/96); a.aL=rc.l; a.aT=rc.t; a.aR=rc.r; a.aB=rc.b; Publish(a,rc.r-w2-fx,rc.t,rc.r,rc.t+h2); return; }
     if(a.aR!=a.aL&&(rc.l!=a.aL||rc.t!=a.aT||rc.r!=a.aR||rc.b!=a.aB)) a.snap=null; }
 

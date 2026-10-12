@@ -23,7 +23,7 @@ static class Catalog{
     new Preset{ Id="typeless", Name="Typeless", ProcName="Typeless", WinTitle="", Paths=new[]{@"%LOCALAPPDATA%\Programs\Typeless\Typeless.exe"}, Native=true, Hint="Runs in the tray by itself; options are in app settings" },
     new Preset{ Id="spotify", Name="Spotify", ProcName="Spotify", WinTitle="", Paths=new[]{@"%APPDATA%\Spotify\Spotify.exe"}, AppxPrefix="SpotifyAB.SpotifyMusic_", AppxExe="Spotify.exe", Aumid="SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify", SettingsKeys="^p", Native=true, Hint="Settings → Startup and window behaviour → close button minimizes to tray" },
     new Preset{ Id="line", Name="LINE", ProcName="LINE", WinTitle="LINE", Paths=new[]{@"%LOCALAPPDATA%\LINE\bin\current\LINE.exe",@"%LOCALAPPDATA%\LINE\bin\LineLauncher.exe"}, Native=true, Hint="Already stays in the tray when closed" },
-    new Preset{ Id="lmstudio", Name="LM Studio", ProcName="LM Studio", WinTitle="", Paths=new[]{@"%LOCALAPPDATA%\Programs\LM Studio\LM Studio.exe",@"%LOCALAPPDATA%\Programs\lm-studio\LM Studio.exe"}, Native=true, Hint="Has a tray option in app settings" },
+    new Preset{ Id="lmstudio", SettingsKeys="^,", Name="LM Studio", ProcName="LM Studio", WinTitle="", Paths=new[]{@"%LOCALAPPDATA%\Programs\LM Studio\LM Studio.exe",@"%LOCALAPPDATA%\Programs\lm-studio\LM Studio.exe"}, Native=true, Hint="Has a tray option in app settings" },
   };
   public sealed class Found{ public Preset P; public bool Ok; public string Launch, Icon; }
   public static List<Found> DetectAll(){ var r=new List<Found>(); foreach(var p in All){ var f=new Found(); f.P=p; try{ f.Ok=Detect(p,out f.Launch,out f.Icon); }catch{} r.Add(f); } return r; }

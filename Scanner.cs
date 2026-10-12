@@ -12,6 +12,22 @@ static class Scanner{
   [DllImport("user32",EntryPoint="GetWindowLongW")] static extern int GetWindowLong(IntPtr h,int i);
   [DllImport("user32")] static extern bool GetWindowRect(IntPtr h,out TrayHelper.RECT r);
   [DllImport("user32")] static extern bool IsIconic(IntPtr h);
+  [DllImport("user32")] static extern IntPtr GetAncestor(IntPtr h,uint f);
+  [DllImport("user32")] static extern IntPtr GetLastActivePopup(IntPtr h);
+  // Raymond Chen's Alt+Tab rule + Win10/11 extras (cloaked, tool, no-activate).
+  public static bool AltTab(IntPtr h){ if(!IsWindowVisible(h)) return false;
+    IntPtr walk=GetAncestor(h,3), tr; int guard=0; while((tr=GetLastActivePopup(walk))!=walk&&guard++<50){ if(IsWindowVisible(tr)) break; walk=tr; } if(walk!=h) return false;
+    int ex=GetWindowLong(h,-20); bool appw=(ex&0x40000)!=0; if(!appw&&((ex&0x80)!=0||(ex&0x08000000)!=0)) return false;
+    int cl; if(DwmGetWindowAttribute(h,14,out cl,4)==0&&cl!=0) return false;
+    var t=new StringBuilder(4); return GetWindowText(h,t,4)>0; }
+  public sealed class Win{ public IntPtr H; public string Title, Proc, Cls, Exe, Aumid; }
+  public static List<Win> AltTabWindows(){ var res=new List<Win>(); int me=Process.GetCurrentProcess().Id; var excl=new HashSet<string>(TrayHelper.Exclude,StringComparer.OrdinalIgnoreCase);
+    EnumWindows((h,l)=>{ if(!AltTab(h)) return true; uint pid; GetWindowThreadProcessId(h,out pid); if(pid==me) return true;
+      var c=new StringBuilder(256); GetClassName(h,c,256); var cls=c.ToString(); if(cls=="Progman"||cls=="Shell_TrayWnd"||cls=="WorkerW") return true;
+      string pn=null; try{ using(var p=Process.GetProcessById((int)pid)) pn=p.ProcessName; }catch{} if(pn==null||excl.Contains(pn)) return true;
+      var t=new StringBuilder(256); GetWindowText(h,t,256); string exe=null, aumid=null; var ph=OpenProcess(0x1000,false,pid);
+      if(ph!=IntPtr.Zero){ try{ var sb=new StringBuilder(1024); int n=sb.Capacity; if(QueryFullProcessImageName(ph,0,sb,ref n)) exe=sb.ToString(); var sa=new StringBuilder(256); int na=sa.Capacity; try{ if(GetApplicationUserModelId(ph,ref na,sa)==0) aumid=sa.ToString(); }catch(EntryPointNotFoundException){} }finally{ CloseHandle(ph); } }
+      res.Add(new Win{ H=h, Title=t.ToString(), Proc=pn, Cls=cls, Exe=exe, Aumid=aumid }); return true; },IntPtr.Zero); return res; }
   [DllImport("dwmapi")] static extern int DwmGetWindowAttribute(IntPtr h,int a,out int v,int s);
   [DllImport("kernel32")] static extern IntPtr OpenProcess(uint a,bool i,uint pid);
   [DllImport("kernel32")] static extern bool CloseHandle(IntPtr h);
@@ -37,9 +53,7 @@ static class Scanner{
     var nativeProcs=new HashSet<string>(Catalog.All.Where(p=>p.Native).Select(p=>p.ProcName),StringComparer.OrdinalIgnoreCase);
     EnumWindows((h,l)=>{ if(!IsWindowVisible(h)) return true;
       var t=new StringBuilder(256); GetWindowText(h,t,256); if(t.Length==0) return true;
-      int ex=GetWindowLong(h,-20); bool tool=(ex&0x80)!=0, appw=(ex&0x40000)!=0; IntPtr owner=GetWindow(h,4);
-      if(tool&&!appw) return true; if(owner!=IntPtr.Zero&&!appw) return true;
-      int cl; if(DwmGetWindowAttribute(h,14,out cl,4)==0&&cl!=0) return true;
+      if(!AltTab(h)) return true;
       TrayHelper.RECT rc; if(!IsIconic(h)&&(!GetWindowRect(h,out rc)||rc.r-rc.l<200||rc.b-rc.t<120)) return true;
       var c=new StringBuilder(256); GetClassName(h,c,256); var cls=c.ToString(); if(cls=="Progman"||cls=="Shell_TrayWnd"||cls=="WorkerW") return true;
       uint pid; GetWindowThreadProcessId(h,out pid); if(pid==me) return true;
