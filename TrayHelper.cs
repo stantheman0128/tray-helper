@@ -40,7 +40,7 @@ class TrayHelper : ApplicationContext {
   [DllImport("user32",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h,StringBuilder s,int n);
   [DllImport("user32")] static extern bool GetWindowRect(IntPtr h,out RECT r);
   [DllImport("user32")] static extern IntPtr GetForegroundWindow();
-  [DllImport("user32",CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string c,string t);
+  [DllImport("user32",CharSet=CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr p,IntPtr a,string c,string t);
   [DllImport("user32")] static extern bool PostMessage(IntPtr h,uint m,IntPtr w,IntPtr l);
   [DllImport("user32")] static extern bool SetProcessDpiAwarenessContext(IntPtr c);
   [DllImport("user32")] static extern bool SetProcessDPIAware();
@@ -245,7 +245,7 @@ class TrayHelper : ApplicationContext {
     try{ Dir=Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName); }catch{}
     if(string.IsNullOrEmpty(Dir)) Dir=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
     IniPath=Path.Combine(Dir,"tray-helper.ini"); if(!File.Exists(IniPath)){ var g=new AppTarget(); g.Name="Grok Bot"; g.ExePath=Environment.ExpandEnvironmentVariables("%LOCALAPPDATA%\\Programs\\Grok Bot\\Grok Bot.exe"); g.ProcName="Grok Bot"; g.WinTitle="Grok Bot"; g.WinClass="Chrome_WidgetWin_1"; g.Watchdog=true; Apps.Add(g); SaveAll(); } LoadConfig();
-    bool created; var mx=new Mutex(true,"Local\\TrayHelper",out created); if(!created){ mx.Dispose(); var w=FindWindow(null,"TrayHelper.msg"); if(w!=IntPtr.Zero) PostMessage(w,0x8002,IntPtr.Zero,IntPtr.Zero); return; } // 2nd launch opens settings
+    bool created; var mx=new Mutex(true,"Local\\TrayHelper",out created); if(!created){ mx.Dispose(); var w=FindWindowEx(new IntPtr(-3),IntPtr.Zero,null,"TrayHelper.msg"); if(w!=IntPtr.Zero) PostMessage(w,0x8002,IntPtr.Zero,IntPtr.Zero); return; } // 2nd launch opens settings
     try{ Application.EnableVisualStyles(); Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
       Application.ThreadException+=delegate(object s,ThreadExceptionEventArgs e){ Log("ui "+e.Exception.Message); };
       Application.Run(new TrayHelper()); }finally{ mx.Dispose(); } }
