@@ -3,7 +3,7 @@
 Current stage: **MVP** (speed over polish). Grok CLI will handle the hardening, packaging and test passes later.
 
 ## Next
-- **Crash-loop backoff for the watchdog**: exponential backoff, and give up after 3 failures in 5 min, with a tray balloon to say so.
+- ~~Crash-loop backoff~~ (done: max 3 relaunches in 5 min, exponential delay).
 - **Installer / uninstaller**: copy to `%LOCALAPPDATA%\TrayHelper`, add a Startup shortcut, migrate the old `GrokBotTray` ini, and remove GrokBotTray.
 - **README (EN + zh-TW)**: what it does, screenshots, presets, FAQ (elevated apps, UWP limits).
 - **Store/MSIX ExePath auto-detect**: the picker already resolves the AUMID (`shell:AppsFolder\<AUMID>`). Also resolve it for hand-written entries and when a package version changes.

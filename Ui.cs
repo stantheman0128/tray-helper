@@ -164,7 +164,7 @@ sealed class SettingsWindow:Window{
   static Border Card(UIElement child){ var b=new Border(); b.CornerRadius=new CornerRadius(6); b.Background=Theme.Card; b.BorderBrush=Theme.Line; b.BorderThickness=new Thickness(1); b.Padding=new Thickness(16,12,16,12); b.Margin=new Thickness(0,0,0,4); b.Child=child; return b; }
   static StackPanel Header(string title,string sub){ var s=new StackPanel(); s.Margin=new Thickness(0,0,0,16); s.Children.Add(Theme.T(title,26,Theme.Text,FontWeights.SemiBold)); var d=Theme.T(sub,13,Theme.Sub,FontWeights.Normal); d.TextWrapping=TextWrapping.Wrap; d.Margin=new Thickness(0,4,0,0); s.Children.Add(d); return s; }
   UIElement AppsPage(){
-    var st=new StackPanel(); st.Children.Add(Header("Apps","Supported apps found on this PC. Turn on \"Close to tray\" and the X button / Alt+F4 hides the window instead of quitting, so the app keeps running in the background."));
+    var st=new StackPanel(); st.Children.Add(Header("Apps","Supported apps found on this PC. Turn on \"Close to tray\": X / Alt+F4 hides the window, the app gets its own tray icon, and it is auto-restarted (hidden) if it crashes. Quitting from the menu never restarts it."));
     var bar=new StackPanel(); bar.Orientation=Orientation.Horizontal; bar.Margin=new Thickness(0,0,0,12);
     var add=Theme.MkBtn("Add app…","Accent"); add.Click+=(s,e)=>AddApp(); bar.Children.Add(add);
     var scan=Theme.MkBtn("Rescan","Btn"); scan.Margin=new Thickness(8,0,0,0); scan.Click+=(s,e)=>{ try{ Catalog.Merge(TrayHelper.Apps); TrayHelper.SaveAll(); }catch{} Rebuild(); }; bar.Children.Add(scan);
@@ -176,7 +176,6 @@ sealed class SettingsWindow:Window{
       tx.Children.Add(Theme.T(a.Name+(a.Preset?"":"  (custom)"),14,Theme.Text,FontWeights.Normal)); var stt=Theme.T(Theme.StatusText(a),12,Theme.Sub,FontWeights.Normal); statusLabels[a]=stt; tx.Children.Add(stt);
       Grid.SetColumn(tx,1); g.Children.Add(tx);
       var show=Theme.MkBtn("Show","Btn"); show.Click+=(s,e)=>th.Show_(a); show.Margin=new Thickness(0,0,16,0); Grid.SetColumn(show,2); g.Children.Add(show);
-      var wd=Labeled("Watchdog",a.Watchdog,v=>th.SetWatchdog(a,v)); wd.ToolTip="Relaunch hidden if the app closes unexpectedly"; wd.Margin=new Thickness(0,0,18,0); Grid.SetColumn(wd,3); g.Children.Add(wd);
       var ct=Labeled("Close to tray",a.Enabled,v=>th.SetEnabled(a,v)); Grid.SetColumn(ct,4); g.Children.Add(ct);
       var card=Card(g);
       if(!a.Preset){ var cm=new ContextMenu(); var mi=new MenuItem(); mi.Header="Remove "+a.Name; mi.Click+=(s,e)=>{ if(MessageBox.Show(this,"Remove "+a.Name+" from TrayHelper?","TrayHelper",MessageBoxButton.YesNo)==MessageBoxResult.Yes){ th.RemoveApp(a); Rebuild(); } }; cm.Items.Add(mi); card.ContextMenu=cm; card.ToolTip="Right-click to remove"; }
@@ -198,7 +197,7 @@ sealed class SettingsWindow:Window{
     var h=new StackPanel(); h.Orientation=Orientation.Horizontal; h.Margin=new Thickness(0,0,0,16); h.Children.Add(Theme.Img(Theme.Logo,64));
     var ht=new StackPanel(); ht.Margin=new Thickness(16,0,0,0); ht.VerticalAlignment=VerticalAlignment.Center; ht.Children.Add(Theme.T("TrayHelper",26,Theme.Text,FontWeights.SemiBold)); ht.Children.Add(Theme.T("Close the window, keep the app.  ·  MVP 0.2  ·  MIT, unofficial",13,Theme.Sub,FontWeights.Normal)); h.Children.Add(ht); st.Children.Add(h);
     var rm=new StackPanel(); rm.Children.Add(Theme.T("Roadmap",15,Theme.Text,FontWeights.SemiBold));
-    foreach(var line in new[]{"Background auto-update of TrayHelper","Detect when an app ships its own close-to-tray option, then retire our toggle and guide you to the official setting","Watchdog crash-loop backoff","Installer, README, Store-app auto-detect for custom apps"}){ var t=Theme.T("•  "+line,13,Theme.Sub,FontWeights.Normal); t.TextWrapping=TextWrapping.Wrap; t.Margin=new Thickness(0,6,0,0); rm.Children.Add(t); }
+    foreach(var line in new[]{"Background auto-update of TrayHelper","Detect when an app ships its own close-to-tray option, then retire our toggle and guide you to the official setting","Installer, README, Store-app auto-detect for custom apps"}){ var t=Theme.T("•  "+line,13,Theme.Sub,FontWeights.Normal); t.TextWrapping=TextWrapping.Wrap; t.Margin=new Thickness(0,6,0,0); rm.Children.Add(t); }
     st.Children.Add(Card(rm)); return st; }
   void AddApp(){ var p=new PickerWindow(); p.Owner=this; if(p.ShowDialog()==true&&p.Result!=null){
       if(TrayHelper.Apps.Any(x=>string.Equals(x.Name,p.Result.Name,StringComparison.OrdinalIgnoreCase))){ MessageBox.Show(this,p.Result.Name+" is already managed.","TrayHelper"); return; }
