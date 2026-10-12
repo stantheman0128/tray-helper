@@ -167,7 +167,7 @@ partial class TrayHelper{
     Theme.Init(); if(flyout!=null) flyout.Hide();
     try{ Catalog.Merge(Apps); }catch{}
     if(settingsWin==null){ settingsWin=new SettingsWindow(this); Interop(settingsWin); }
-    settingsWin.Rebuild(); bool wasVis=settingsWin.IsVisible; settingsWin.Show(); if(!wasVis) settingsWin.WindowState=OpenMaximized?WindowState.Maximized:WindowState.Normal; else if(settingsWin.WindowState==WindowState.Minimized) settingsWin.WindowState=OpenMaximized?WindowState.Maximized:WindowState.Normal; settingsWin.Activate();
+    settingsWin.Rebuild(); bool wasVis=settingsWin.IsVisible; if(!wasVis){ settingsWin.PlaceForOpen(); } settingsWin.Show(); if(wasVis&&settingsWin.WindowState==WindowState.Minimized) settingsWin.WindowState=OpenMaximized||WinMax?WindowState.Maximized:WindowState.Normal; settingsWin.Activate();
   }
   Window mini;
   public void ShowAppMenu(AppTarget a){ Theme.Init();
@@ -199,8 +199,7 @@ sealed class SettingsWindow:Window{
   readonly TrayHelper th; bool reallyClose; ContentControl page; RadioButton navApps, navGeneral, navAbout;
   readonly Dictionary<AppTarget,TextBlock> statusLabels=new Dictionary<AppTarget,TextBlock>(); DispatcherTimer timer;
   public SettingsWindow(TrayHelper th){ this.th=th; Title="TrayHelper"; Width=TrayHelper.WinW>=620?TrayHelper.WinW:900; Height=TrayHelper.WinH>=400?TrayHelper.WinH:600; MinWidth=620; MinHeight=400; WindowStartupLocation=WindowStartupLocation.CenterScreen;
-    SizeChanged+=(s,e)=>{ if(WindowState==WindowState.Normal&&IsLoaded){ TrayHelper.WinW=ActualWidth; TrayHelper.WinH=ActualHeight; } };
-    IsVisibleChanged+=(s,e)=>{ if(!IsVisible) try{ TrayHelper.SaveAll(); }catch{} };
+
     Background=Theme.Bg; FontFamily=Theme.Font; Resources.MergedDictionaries.Add(Theme.Res); Icon=Theme.Logo;
     SourceInitialized+=(s,e)=>Theme.DarkTitle(this);
     var root=new Grid(); root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(220)}); root.ColumnDefinitions.Add(new ColumnDefinition());
@@ -278,18 +277,18 @@ sealed class SettingsWindow:Window{
     st.Children.Add(Row("Export / import",null,io));
     var lf=Theme.MkBtn("Open folder","Btn"); lf.Click+=(s,e)=>{ try{ Process.Start("explorer.exe","\""+TrayHelper.Dir+"\""); }catch{} };
     st.Children.Add(Row("Config folder",null,lf));
-    var up=Theme.MkBtn("Check now","Btn"); up.Click+=(s,e)=>MessageBox.Show(this,"Automatic updates are not available yet (on the roadmap). You are on 0.5.0.","TrayHelper");
-    st.Children.Add(Row("Check for updates","0.5.0",up));
+    var up=Theme.MkBtn("Check now","Btn"); up.Click+=(s,e)=>MessageBox.Show(this,"Automatic updates are not available yet (on the roadmap). You are on 0.5.1.","TrayHelper");
+    st.Children.Add(Row("Check for updates","0.5.1",up));
     var rs=Theme.MkBtn("Reset…","Btn"); rs.Click+=(s,e)=>{ if(MessageBox.Show(this,"Reset TrayHelper's app list and settings to defaults?","TrayHelper",MessageBoxButton.YesNo)!=MessageBoxResult.Yes) return; try{ File.Copy(TrayHelper.IniPath,TrayHelper.IniPath+".bak",true); File.Delete(TrayHelper.IniPath); th.ReloadConfig(); Rebuild(); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } };
     st.Children.Add(Row("Reset to defaults",null,rs));
     var ah=Theme.T("Advanced",15,Theme.Text,FontWeights.SemiBold); ah.Margin=new Thickness(2,18,0,6); st.Children.Add(ah);
-    st.Children.Add(Row("Open this window maximized","Off: restore last size",Labeled("",TrayHelper.OpenMaximized,v=>{ TrayHelper.OpenMaximized=v; TrayHelper.SaveAll(); })));
+    st.Children.Add(Row("Open this window maximized","Off: restore last size and position",Labeled("",TrayHelper.OpenMaximized,v=>{ TrayHelper.OpenMaximized=v; TrayHelper.SaveAll(); })));
     return st; }
   static Border Row(string title,string sub,UIElement right){ var g=new Grid(); g.ColumnDefinitions.Add(new ColumnDefinition()); g.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
     var tx=new StackPanel(); tx.Children.Add(Theme.T(title,14,Theme.Text,FontWeights.Normal)); if(sub!=null){ var s=Theme.T(sub,12,Theme.Sub,FontWeights.Normal); tx.Children.Add(s); } tx.VerticalAlignment=VerticalAlignment.Center; g.Children.Add(tx); Grid.SetColumn(right,1); g.Children.Add(right); return Card(g); }
   UIElement AboutPage(){ var st=new StackPanel();
     var h=new StackPanel(); h.Orientation=Orientation.Horizontal; h.Margin=new Thickness(0,0,0,16); h.Children.Add(Theme.Img(Theme.Logo,64));
-    var ht=new StackPanel(); ht.Margin=new Thickness(16,0,0,0); ht.VerticalAlignment=VerticalAlignment.Center; ht.Children.Add(Theme.T("TrayHelper",26,Theme.Text,FontWeights.SemiBold)); ht.Children.Add(Theme.T("Close the window, keep the app.  ·  v0.5.0  ·  MIT, unofficial",13,Theme.Sub,FontWeights.Normal)); h.Children.Add(ht); st.Children.Add(h);
+    var ht=new StackPanel(); ht.Margin=new Thickness(16,0,0,0); ht.VerticalAlignment=VerticalAlignment.Center; ht.Children.Add(Theme.T("TrayHelper",26,Theme.Text,FontWeights.SemiBold)); ht.Children.Add(Theme.T("Close the window, keep the app.  ·  v0.5.1  ·  MIT, unofficial",13,Theme.Sub,FontWeights.Normal)); h.Children.Add(ht); st.Children.Add(h);
     var rm=new StackPanel(); string cl=null; try{ using(var rs=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("CHANGELOG.md")) if(rs!=null) using(var rd=new StreamReader(rs)) cl=rd.ReadToEnd(); }catch{}
     if(cl==null) cl="# Changelog\n\n## 0.5.0";
     foreach(var raw in cl.Replace("\r","").Split('\n')){ var line=raw.TrimEnd(); if(line.Length==0) continue; TextBlock t;
@@ -305,8 +304,18 @@ sealed class SettingsWindow:Window{
   void AddApp(){ var p=new PickerWindow(); p.Owner=this; if(p.ShowDialog()==true&&p.Result!=null){
       if(TrayHelper.Apps.Any(x=>string.Equals(x.Name,p.Result.Name,StringComparison.OrdinalIgnoreCase))){ MessageBox.Show(this,p.Result.Name+" is already managed.","TrayHelper"); return; }
       th.AddApp(p.Result); Rebuild(); } }
+  // Remember RestoreBounds (never the maximized Left/Top) plus state.
+  void SaveBounds(){ try{ if(!IsLoaded) return; var r=WindowState==WindowState.Normal?new Rect(Left,Top,ActualWidth,ActualHeight):RestoreBounds; if(r.IsEmpty||r.Width<100) return;
+      TrayHelper.WinL=r.Left; TrayHelper.WinT=r.Top; TrayHelper.WinW=r.Width; TrayHelper.WinH=r.Height; TrayHelper.WinMax=WindowState==WindowState.Maximized; TrayHelper.SaveAll(); }catch{} }
+  public void PlaceForOpen(){ WindowState=WindowState.Normal; double w=TrayHelper.WinW>=MinWidth?TrayHelper.WinW:900, h=TrayHelper.WinH>=MinHeight?TrayHelper.WinH:600, l=TrayHelper.WinL, t=TrayHelper.WinT;
+    var vs=new Rect(SystemParameters.VirtualScreenLeft,SystemParameters.VirtualScreenTop,SystemParameters.VirtualScreenWidth,SystemParameters.VirtualScreenHeight); bool onScreen=false;
+    if(!double.IsNaN(l)&&!double.IsNaN(t)){ var src=PresentationSource.FromVisual(this); double sx=1,sy=1; if(src!=null&&src.CompositionTarget!=null){ sx=src.CompositionTarget.TransformToDevice.M11; sy=src.CompositionTarget.TransformToDevice.M22; }
+      var cap=new System.Drawing.Rectangle((int)((l+40)*sx),(int)((t+8)*sy),(int)(Math.Max(100,w-80)*sx),(int)(32*sy)); foreach(var sc in System.Windows.Forms.Screen.AllScreens) if(sc.WorkingArea.IntersectsWith(cap)){ onScreen=true; break; } }
+    var wa=SystemParameters.WorkArea; if(!onScreen){ w=Math.Min(w,wa.Width); h=Math.Min(h,wa.Height); l=wa.Left+(wa.Width-w)/2; t=wa.Top+(wa.Height-h)/2; }
+    WindowStartupLocation=WindowStartupLocation.Manual; Left=l; Top=t; Width=w; Height=h;
+    if(TrayHelper.OpenMaximized||TrayHelper.WinMax) WindowState=WindowState.Maximized; }
   public void ReallyClose(){ reallyClose=true; timer.Stop(); Close(); }
-  protected override void OnClosing(System.ComponentModel.CancelEventArgs e){ if(!reallyClose){ e.Cancel=true; Hide(); return; } base.OnClosing(e); }
+  protected override void OnClosing(System.ComponentModel.CancelEventArgs e){ SaveBounds(); if(!reallyClose){ e.Cancel=true; Hide(); return; } base.OnClosing(e); }
 }
 
 sealed class PickerWindow:Window{

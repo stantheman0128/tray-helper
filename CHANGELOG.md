@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+- Fix: Settings window reopened at an odd position after closing maximized (saves restore bounds + state, checks the monitor is still there)
+- Quit from the tray menu closes the app without flashing its window
+
 ## 0.5.0
 - Animated drag-to-reorder in the tray panel and the Apps page
 - "Open settings" jumps straight to the app's settings page where it has a shortcut (Claude, ChatGPT / Codex, LM Studio: Ctrl+, · Spotify: Ctrl+P)
