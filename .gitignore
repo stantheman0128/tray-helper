@@ -1,3 +1,9 @@
 dist/
+*.exe
 *.log
 status.txt
+scan.txt
+tray-helper.ini
+tray-helper.ini.bak
+screens/
+*.tgz
