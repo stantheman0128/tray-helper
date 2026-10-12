@@ -5,7 +5,7 @@ using System.Runtime.InteropServices; using System.Text; using System.Threading;
 
 sealed class CloseSnap{ public readonly int l,t,r,b; public CloseSnap(int l,int t,int r,int b){ this.l=l; this.t=t; this.r=r; this.b=b; } }
 
-sealed class AppTarget{ public bool geoLogged;
+sealed class AppTarget{ public bool wasMax, wasMin; public bool geoLogged;
   public string Name, ExePath, ProcName, WinClass, WinTitle, IconExe, Note; public bool Enabled=true, Watchdog=true, Preset, Detected=true, NativeTray, gaveUp, AlwaysRestart, RestartOnCrash, Native, Notified, Geometric;
   public string Id, Hint, SettingsKeys; public bool CtrlQ, CtrlW; public bool IsGrok{ get{ return Id=="grokbot"; } }
   public volatile bool moved; public NotifyIcon Tray; public Icon TrayIcon; public Process mainProc; public List<DateTime> relaunches=new List<DateTime>(); public DateTime nextTry=DateTime.MinValue;
@@ -33,6 +33,7 @@ partial class TrayHelper : ApplicationContext {
   [DllImport("user32")] static extern IntPtr GetAncestor(IntPtr h,uint f);
   [DllImport("user32")] static extern IntPtr SendMessageTimeout(IntPtr h,uint m,IntPtr w,IntPtr l,uint f,uint t,out IntPtr r);
   [DllImport("user32")] static extern bool ShowWindow(IntPtr h,int c);
+  [DllImport("user32")] static extern bool IsIconic(IntPtr h);
   [DllImport("user32")] static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32")] public static extern bool IsWindow(IntPtr h);
   [DllImport("user32")] public static extern bool IsWindowVisible(IntPtr h);
@@ -116,10 +117,13 @@ partial class TrayHelper : ApplicationContext {
   public void Move(AppTarget a,AppTarget before){ if(a==before) return; Apps.Remove(a); int i=before==null?Apps.Count:Apps.IndexOf(before); if(i<0) i=Apps.Count; Apps.Insert(i,a); snapApps=Apps.ToArray(); SaveAll(); }
   public void OpenAppSettings(AppTarget a){ ShowApp(a); if(string.IsNullOrEmpty(a.SettingsKeys)) return;
     var t=new System.Windows.Forms.Timer(); t.Interval=900; t.Tick+=(s,e)=>{ t.Stop(); t.Dispose(); try{ if(a.hwnd!=IntPtr.Zero&&GetForegroundWindow()==a.hwnd){ SendKeys.SendWait(a.SettingsKeys); Log(a.Name+": sent settings shortcut"); } else Log(a.Name+": not foreground, settings shortcut skipped"); }catch{} }; t.Start(); }
-  public void Hide_(AppTarget a){ if(a.Running&&!a.Hidden){ ShowWindow(a.hwnd,0); a.snap=null; a.hiddenAt=DateTime.Now; } }
+  // Keep maximized state across hide/show: SW_SHOWMAXIMIZED if it was zoomed, never SW_RESTORE/SHOWNORMAL on it.
+  static void HideWin(AppTarget a,IntPtr h){ if(h==IntPtr.Zero) return; if(IsWindowVisible(h)){ a.wasMax=IsZoomed(h); a.wasMin=IsIconic(h); } ShowWindow(h,0); }
+  static void ShowWin(AppTarget a){ var h=a.hwnd; if(h==IntPtr.Zero) return; bool max=a.wasMax||IsZoomed(h); ShowWindow(h,max?3:(a.wasMin||IsIconic(h))?9:5); }
+  public void Hide_(AppTarget a){ if(a.Running&&!a.Hidden){ HideWin(a,a.hwnd); a.snap=null; a.hiddenAt=DateTime.Now; } }
   public void Exit_(){ ExitHelper(); }
   public void AddApp(AppTarget a){ Apps.Add(a); snapApps=Apps.ToArray(); SaveAll(); Log("added "+a.Name); }
-  public void RemoveApp(AppTarget a){ a.Enabled=false; a.snap=null; if(a.Hidden) ShowWindow(a.hwnd,5); Apps.Remove(a); snapApps=Apps.ToArray(); SaveAll(); Log("removed "+a.Name); }
+  public void RemoveApp(AppTarget a){ a.Enabled=false; a.snap=null; if(a.Hidden) ShowWin(a); Apps.Remove(a); snapApps=Apps.ToArray(); SaveAll(); Log("removed "+a.Name); }
   public static string StateOf(AppTarget a){ return State(a); }
   internal static void SaveAll(){ try{ var sb=new StringBuilder();
     sb.AppendLine("; TrayHelper config. One [App:Name] section per app. Edited by the settings window.");
@@ -170,7 +174,7 @@ partial class TrayHelper : ApplicationContext {
     bool running=a.hwnd!=IntPtr.Zero;
     if(running){ a.seenRunning=true; a.goneSince=DateTime.MaxValue; if(a.userQuit&&a.quitSawGone&&IsWindowVisible(a.hwnd)){ a.userQuit=false; a.quitSawGone=false; } }
     else{ if(a.goneSince==DateTime.MaxValue&&a.seenRunning){ a.goneSince=DateTime.Now; CheckCleanExit(a); } if(a.userQuit) a.quitSawGone=true; }
-    if(running&&a.hideNew&&IsWindowVisible(a.hwnd)){ ShowWindow(a.hwnd,0); a.hideNew=false; a.hiddenAt=DateTime.Now; a.snap=null; Log(a.Name+": hid relaunched window"); }
+    if(running&&a.hideNew&&IsWindowVisible(a.hwnd)){ HideWin(a,a.hwnd); a.hideNew=false; a.hiddenAt=DateTime.Now; a.snap=null; Log(a.Name+": hid relaunched window"); }
     if(!running&&a.Enabled&&!a.Native&&a.IsGrok&&!a.gaveUp&&a.seenRunning&&!a.userQuit&&(DateTime.Now-a.goneSince).TotalSeconds>=2&&DateTime.Now>=a.nextTry){
       if(BlocksRelaunch(a)) a.nextTry=DateTime.Now.AddSeconds(3);
       else{ a.relaunches.RemoveAll(t=>(DateTime.Now-t).TotalMinutes>5);
@@ -253,13 +257,13 @@ partial class TrayHelper : ApplicationContext {
     if(kind==1){ var s=a.snap; if(s==null||!(x>=s.l&&x<s.r&&y>=s.t&&y<s.b)){ Log(a.Name+": skip, rect moved"); return; }
       var p=new POINT(); p.x=x; p.y=y; var under=WindowFromPoint(p); var root=under==IntPtr.Zero?IntPtr.Zero:GetAncestor(under,2);
       if(root!=h){ Log(a.Name+": skip, under="+under+" root="+root+" at "+x+","+y); return; } }
-    ShowWindow(h,0); a.snap=null; a.hiddenAt=DateTime.Now; FirstHideNote(a); Log(a.Name+": hid ("+(kind==1?"X":"alt+f4")+")"); }
+    HideWin(a,h); a.snap=null; a.hiddenAt=DateTime.Now; FirstHideNote(a); Log(a.Name+": hid ("+(kind==1?"X":"alt+f4")+")"); }
 
   static void HoldProc(AppTarget a){ try{ if(a.mainProc!=null){ a.mainProc.Dispose(); a.mainProc=null; } uint pid; GetWindowThreadProcessId(a.hwnd,out pid); var p=Process.GetProcessById((int)pid); var hh=p.Handle; a.mainProc=p; }catch{ a.mainProc=null; } }
   // App quit itself cleanly (its own Quit menu) -> exit code 0 -> treat like a user quit, no relaunch.
   static void CheckCleanExit(AppTarget a){ try{ if(a.IsGrok){ if(a.mainProc!=null&&a.mainProc.HasExited) Log(a.Name+": exited code "+a.mainProc.ExitCode+", AlwaysRestart -> will relaunch"); return; } if(a.mainProc!=null&&a.mainProc.WaitForExit(1500)&&a.mainProc.ExitCode==0&&!a.hideNew){ a.userQuit=true; a.quitSawGone=true; Log(a.Name+": exited cleanly (code 0), no relaunch"); } else if(a.mainProc!=null&&a.mainProc.HasExited) Log(a.Name+": exited code "+a.mainProc.ExitCode); }catch{} }
   void FirstHideNote(AppTarget a){ if(!NotifyFirstHide||a.Notified) return; a.Notified=true; SaveAll(); try{ var t=a.Tray??tray; t.ShowBalloonTip(4000,a.Name+" is still running","Closed to the tray. Click its tray icon to bring it back.",ToolTipIcon.Info); }catch{} }
-  public void ReloadConfig(){ foreach(var a in Apps){ if(a.Hidden) ShowWindow(a.hwnd,5); a.snap=null; SyncAppTray(a,false); } Apps.Clear(); LoadConfig(); try{ Catalog.Merge(Apps); }catch{} snapApps=Apps.ToArray(); SaveAll(); Log("config reloaded"); }
+  public void ReloadConfig(){ foreach(var a in Apps){ if(a.Hidden) ShowWin(a); a.snap=null; SyncAppTray(a,false); } Apps.Clear(); LoadConfig(); try{ Catalog.Merge(Apps); }catch{} snapApps=Apps.ToArray(); SaveAll(); Log("config reloaded"); }
   void SyncAppTray(AppTarget a,bool running){
     bool want=running&&a.Enabled&&!a.Native&&!a.NativeTray&&!exiting;
     if(!want){ if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } return; }
@@ -267,11 +271,11 @@ partial class TrayHelper : ApplicationContext {
     if(a.TrayIcon==null){ try{ if(a.IconExe!=null) a.TrayIcon=Icon.ExtractAssociatedIcon(a.IconExe); }catch{} }
     var t=new NotifyIcon(); t.Icon=a.TrayIcon??ownedIcon??SystemIcons.Application; t.Text=a.Name.Length>63?a.Name.Substring(0,63):a.Name;
     t.MouseUp+=(s,e)=>{ if(e.Button==MouseButtons.Right) ShowAppMenu(a); };
-    t.MouseClick+=(s,e)=>{ if(e.Button!=MouseButtons.Left) return; if(a.Hidden) ShowApp(a); else if(a.Running){ ShowWindow(a.hwnd,0); a.snap=null; a.hiddenAt=DateTime.Now; Log(a.Name+": hid (tray click)"); } };
+    t.MouseClick+=(s,e)=>{ if(e.Button!=MouseButtons.Left) return; if(a.Hidden) ShowApp(a); else if(a.Running){ HideWin(a,a.hwnd); a.snap=null; a.hiddenAt=DateTime.Now; Log(a.Name+": hid (tray click)"); } };
     t.Visible=true; a.Tray=t; }
   void ShowApp(AppTarget a){ a.gaveUp=false; a.relaunches.Clear(); a.userQuit=false; a.quitSawGone=false; a.hideNew=false;
     if(a.hwnd==IntPtr.Zero||!IsWindow(a.hwnd)) a.hwnd=FindMain(a);
-    if(a.hwnd!=IntPtr.Zero){ ShowWindow(a.hwnd,5); ShowWindow(a.hwnd,9); SetForegroundWindow(a.hwnd); Log(a.Name+": shown"); }
+    if(a.hwnd!=IntPtr.Zero){ ShowWin(a); SetForegroundWindow(a.hwnd); Log(a.Name+": shown"); }
     else{ try{ a.lastLaunch=DateTime.Now; if(!StartApp(a)) Log(a.Name+": launch fail"); }catch(Exception ex){ Log(a.Name+": launch fail "+ex.Message); } } }
   void QuitApp(AppTarget a){ a.userQuit=true; a.quitSawGone=false; a.snap=null; Log(a.Name+": user quit");
     // Close while hidden: the window is never shown. Interception is off for this app while userQuit is set.
@@ -288,7 +292,7 @@ partial class TrayHelper : ApplicationContext {
     try{ if(timer!=null){ timer.Stop(); timer.Dispose(); timer=null; } }catch{} try{ UnhookOnly(); }catch{} try{ if(weHook!=IntPtr.Zero) UnhookWinEvent(weHook); if(fgHook!=IntPtr.Zero) UnhookWinEvent(fgHook); }catch{}
     try{ if(ui!=null){ ui.DestroyHandle(); ui=null; } }catch{} try{ CloseWpf(); }catch{}
     try{ if(tray!=null){ tray.Visible=false; tray.Icon=null; tray.Dispose(); tray=null; } if(ownedIcon!=null) ownedIcon.Dispose(); }catch{} }
-  void ExitHelper(){ foreach(var a in Apps){ if(a.Hidden) ShowWindow(a.hwnd,5); if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } } Log("helper exit");
+  void ExitHelper(){ foreach(var a in Apps){ if(a.Hidden) ShowWin(a); if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } } Log("helper exit");
     var later=sync??SynchronizationContext.Current; if(later!=null) later.Post(delegate{ Cleanup(); ExitThread(); },null); else{ Cleanup(); ExitThread(); } }
 
   [STAThread] static void Main(){

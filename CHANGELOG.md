@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.2
+- Fix: apps restored from the tray came back un-maximized (maximized state is kept across hide/show)
+
 ## 0.5.1
 - Fix: Settings window reopened at an odd position after closing maximized (saves restore bounds + state, checks the monitor is still there)
 - Quit from the tray menu closes the app without flashing its window
