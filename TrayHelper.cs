@@ -74,16 +74,6 @@ class TrayHelper : ApplicationContext {
       else if(v.Length==0) continue;
       else if(k=="exepath") cur.ExePath=v; else if(k=="processname") cur.ProcName=v; else if(k=="windowclass") cur.WinClass=v; else if(k=="windowtitle") cur.WinTitle=v; }
   }
-  static void SaveEnabled(AppTarget a){ try{
-    var lines=new List<string>(File.ReadAllLines(IniPath)); int sec=-1, end=lines.Count;
-    for(int i=0;i<lines.Count;i++){ var t=lines[i].Trim();
-      if(t.StartsWith("[")){ if(sec>=0){ end=i; break; } if(string.Equals(t.Trim('[',']').Trim(),"App:"+a.Name,StringComparison.OrdinalIgnoreCase)) sec=i; } }
-    if(sec<0) return; var val="Enabled="+(a.Enabled?"true":"false"); bool done=false;
-    for(int i=sec+1;i<end;i++){ var t=lines[i].Trim(); int e=t.IndexOf('=');
-      if(e>0&&t.Substring(0,e).Trim().Equals("Enabled",StringComparison.OrdinalIgnoreCase)){ lines[i]=val; done=true; break; } }
-    if(!done) lines.Insert(sec+1,val);
-    File.WriteAllLines(IniPath,lines.ToArray()); }catch(Exception ex){ Log("save ini "+ex.Message); } }
-
   static void Log(string s){ try{ if(string.IsNullOrEmpty(Dir)) return; var path=Path.Combine(Dir,"tray-helper.log"); var fi=new FileInfo(path);
     if(fi.Exists&&fi.Length>MaxLogBytes){ var bak=path+".old"; try{ if(File.Exists(bak)) File.Delete(bak); File.Move(path,bak); }catch{} }
     File.AppendAllText(path,DateTime.Now.ToString("s")+" "+s+"\r\n"); }catch{} }
@@ -97,9 +87,9 @@ class TrayHelper : ApplicationContext {
   TrayHelper(){
     tray=new NotifyIcon();
     foreach(var a in Apps){ if(a.ExePath!=null&&File.Exists(a.ExePath)){ try{ ownedIcon=Icon.ExtractAssociatedIcon(a.ExePath); }catch{} if(ownedIcon!=null) break; } }
-    tray.Icon=ownedIcon??SystemIcons.Application; tray.Text="Tray Helper";
+    tray.Icon=ownedIcon??SystemIcons.Application; tray.Text="TrayHelper";
     menu=new ContextMenuStrip(); menu.Opening+=(s,e)=>BuildMenu(); BuildMenu();
-    tray.ContextMenuStrip=menu; tray.MouseClick+=(s,e)=>{ if(e.Button==MouseButtons.Left) LeftClick(); }; tray.Visible=true;
+    tray.ContextMenuStrip=menu; tray.MouseClick+=(s,e)=>{ if(e.Button==MouseButtons.Left) ShowSettings(); }; tray.Visible=true;
     mProc=MouseHook; kProc=KeyHook;
     timer=new System.Windows.Forms.Timer(); timer.Interval=1000; timer.Tick+=(s,e)=>Tick(); timer.Start();
     Application.ApplicationExit+=delegate{ Cleanup(); };
@@ -108,26 +98,27 @@ class TrayHelper : ApplicationContext {
   static string State(AppTarget a){ if(!a.Running) return "not running"; return a.Hidden?"hidden":"visible"; }
   void BuildMenu(){
     menu.Items.Clear();
-    var hdr=new ToolStripMenuItem("Tray Helper (POC)"); hdr.Enabled=false; menu.Items.Add(hdr); menu.Items.Add(new ToolStripSeparator());
-    foreach(var a0 in Apps){ var a=a0;
-      var it=new ToolStripMenuItem(a.Name+"  ["+State(a)+(a.Enabled?"":", off")+"]");
-      var tg=new ToolStripMenuItem("Close to tray (X hides)"); tg.Checked=a.Enabled; tg.Click+=(s,e)=>{ a.Enabled=!a.Enabled; if(!a.Enabled) a.snap=null; SaveEnabled(a); Log(a.Name+": enabled="+a.Enabled); };
-      var wd=new ToolStripMenuItem("Watchdog (auto-relaunch)"); wd.Checked=a.Watchdog; wd.Enabled=false;
-      it.DropDownItems.Add(tg); it.DropDownItems.Add(wd); it.DropDownItems.Add(new ToolStripSeparator());
-      it.DropDownItems.Add("Show "+a.Name,null,(s,e)=>ShowApp(a));
-      it.DropDownItems.Add("Quit "+a.Name,null,(s,e)=>QuitApp(a));
-      menu.Items.Add(it); }
+    menu.Items.Add("Settings...",null,(s,e)=>ShowSettings()); menu.Items.Add(new ToolStripSeparator());
+    foreach(var a0 in Apps){ var a=a0; var it=new ToolStripMenuItem("Show "+a.Name+"  ["+State(a)+(a.Enabled?"":", off")+"]",null,(s,e)=>ShowApp(a)); menu.Items.Add(it); }
     menu.Items.Add(new ToolStripSeparator());
-    menu.Items.Add("Exit helper (restore windows)",null,(s,e)=>ExitHelper());
+    menu.Items.Add("Exit (restore windows)",null,(s,e)=>ExitHelper());
   }
-  void LeftClick(){
-    var hidden=new List<AppTarget>(); foreach(var a in Apps) if(a.Hidden) hidden.Add(a);
-    if(hidden.Count==1){ ShowApp(hidden[0]); return; }
-    if(hidden.Count==0){ var en=Apps.FindAll(x=>x.Enabled); if(en.Count==1){ ShowApp(en[0]); return; } }
-    try{ var mi=typeof(NotifyIcon).GetMethod("ShowContextMenu",BindingFlags.Instance|BindingFlags.NonPublic); mi.Invoke(tray,null); }
-    catch{ if(hidden.Count>0){ hidden.Sort((x,y)=>y.hiddenAt.CompareTo(x.hiddenAt)); ShowApp(hidden[0]); } }
-  }
-
+  SettingsForm settings;
+  void ShowSettings(){ if(settings==null||settings.IsDisposed) settings=new SettingsForm(this); settings.Show(); settings.WindowState=FormWindowState.Normal; settings.Activate(); settings.RefreshRows(); }
+  // ---- API used by SettingsForm ----
+  public List<AppTarget> AppList{ get{ return Apps; } }
+  public void SetEnabled(AppTarget a,bool on){ a.Enabled=on; if(!on) a.snap=null; SaveAll(); Log(a.Name+": enabled="+on); }
+  public void SetWatchdog(AppTarget a,bool on){ a.Watchdog=on; SaveAll(); Log(a.Name+": watchdog="+on); }
+  public void Show_(AppTarget a){ ShowApp(a); }
+  public void AddApp(AppTarget a){ Apps.Add(a); snapApps=Apps.ToArray(); SaveAll(); Log("added "+a.Name); }
+  public void RemoveApp(AppTarget a){ a.Enabled=false; a.snap=null; if(a.Hidden) ShowWindow(a.hwnd,5); Apps.Remove(a); snapApps=Apps.ToArray(); SaveAll(); Log("removed "+a.Name); }
+  public static string StateOf(AppTarget a){ return State(a); }
+  static void SaveAll(){ try{ var sb=new StringBuilder();
+    sb.AppendLine("; TrayHelper config. One [App:Name] section per app. Edited by the settings window.");
+    sb.AppendLine("; ExePath may be a normal exe or shell:AppsFolder\\<AUMID> for Store/MSIX apps.");
+    foreach(var a in Apps){ sb.AppendLine(); sb.AppendLine("[App:"+a.Name+"]"); sb.AppendLine("Enabled="+(a.Enabled?"true":"false"));
+      sb.AppendLine("ExePath="+(a.ExePath??"")); sb.AppendLine("ProcessName="+a.ProcName); sb.AppendLine("WindowClass="+a.WinClass); sb.AppendLine("WindowTitle="+a.WinTitle); sb.AppendLine("Watchdog="+(a.Watchdog?"true":"false")); }
+    File.WriteAllText(IniPath,sb.ToString()); }catch(Exception ex){ Log("save ini "+ex.Message); } }
   // ---------- window tracking ----------
   static bool PidIs(uint pid,string name){ try{ using(var p=Process.GetProcessById((int)pid)) return string.Equals(p.ProcessName,name,StringComparison.OrdinalIgnoreCase); }catch{ return false; } }
   static IntPtr FindMain(AppTarget a){ IntPtr found=IntPtr.Zero; EnumWindows((h,l)=>{
@@ -252,9 +243,75 @@ class TrayHelper : ApplicationContext {
     SetDpi(); MyPid=Process.GetCurrentProcess().Id;
     try{ Dir=Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName); }catch{}
     if(string.IsNullOrEmpty(Dir)) Dir=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-    IniPath=Path.Combine(Dir,"tray-helper.ini"); LoadConfig();
-    bool created; var mx=new Mutex(true,"Local\\TrayHelper_POC",out created); if(!created){ mx.Dispose(); return; }
+    IniPath=Path.Combine(Dir,"tray-helper.ini"); if(!File.Exists(IniPath)){ var g=new AppTarget(); g.Name="Grok Bot"; g.ExePath=Environment.ExpandEnvironmentVariables("%LOCALAPPDATA%\\Programs\\Grok Bot\\Grok Bot.exe"); g.ProcName="Grok Bot"; g.WinTitle="Grok Bot"; g.WinClass="Chrome_WidgetWin_1"; g.Watchdog=true; Apps.Add(g); SaveAll(); } LoadConfig();
+    bool created; var mx=new Mutex(true,"Local\\TrayHelper",out created); if(!created){ mx.Dispose(); return; }
     try{ Application.EnableVisualStyles(); Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
       Application.ThreadException+=delegate(object s,ThreadExceptionEventArgs e){ Log("ui "+e.Exception.Message); };
       Application.Run(new TrayHelper()); }finally{ mx.Dispose(); } }
+}
+
+sealed class SettingsForm:Form{
+  readonly TrayHelper th; DataGridView grid; System.Windows.Forms.Timer t; bool filling;
+  public SettingsForm(TrayHelper th){ this.th=th; Text="TrayHelper"; Width=640; Height=360; StartPosition=FormStartPosition.CenterScreen; ShowInTaskbar=true; AutoScaleMode=AutoScaleMode.Dpi;
+    try{ Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath); }catch{}
+    grid=new DataGridView(); grid.Dock=DockStyle.Fill; grid.AllowUserToAddRows=false; grid.AllowUserToDeleteRows=false; grid.RowHeadersVisible=false; grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect; grid.MultiSelect=false; grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;
+    var c0=new DataGridViewCheckBoxColumn(); c0.HeaderText="Close to tray"; c0.FillWeight=22;
+    var c1=new DataGridViewTextBoxColumn(); c1.HeaderText="App"; c1.ReadOnly=true; c1.FillWeight=40;
+    var c2=new DataGridViewTextBoxColumn(); c2.HeaderText="Status"; c2.ReadOnly=true; c2.FillWeight=22;
+    var c3=new DataGridViewCheckBoxColumn(); c3.HeaderText="Watchdog"; c3.FillWeight=18;
+    grid.Columns.AddRange(new DataGridViewColumn[]{c0,c1,c2,c3});
+    grid.CurrentCellDirtyStateChanged+=(s,e)=>{ if(grid.IsCurrentCellDirty) grid.CommitEdit(DataGridViewDataErrorContexts.Commit); };
+    grid.CellValueChanged+=(s,e)=>{ if(filling||e.RowIndex<0) return; var a=grid.Rows[e.RowIndex].Tag as AppTarget; if(a==null) return; bool v=Convert.ToBoolean(grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value);
+      if(e.ColumnIndex==0) th.SetEnabled(a,v); else if(e.ColumnIndex==3) th.SetWatchdog(a,v); };
+    var bar=new FlowLayoutPanel(); bar.Dock=DockStyle.Bottom; bar.AutoSize=true; bar.Padding=new Padding(4);
+    bar.Controls.Add(Btn("Show",(s,e)=>{ var a=Sel(); if(a!=null) th.Show_(a); }));
+    bar.Controls.Add(Btn("Add app...",(s,e)=>AddApp()));
+    bar.Controls.Add(Btn("Remove",(s,e)=>{ var a=Sel(); if(a!=null&&MessageBox.Show(this,"Remove "+a.Name+"?","TrayHelper",MessageBoxButtons.YesNo)==DialogResult.Yes){ th.RemoveApp(a); RefreshRows(); } }));
+    Controls.Add(grid); Controls.Add(bar);
+    t=new System.Windows.Forms.Timer(); t.Interval=1000; t.Tick+=(s,e)=>{ if(Visible) RefreshRows(); }; t.Start(); }
+  static Button Btn(string txt,EventHandler h){ var b=new Button(); b.Text=txt; b.AutoSize=true; b.Click+=h; return b; }
+  AppTarget Sel(){ return grid.SelectedRows.Count>0?grid.SelectedRows[0].Tag as AppTarget:null; }
+  public void RefreshRows(){ filling=true; try{ var apps=th.AppList;
+      bool same=grid.Rows.Count==apps.Count; for(int i=0;same&&i<apps.Count;i++) if(grid.Rows[i].Tag!=apps[i]) same=false;
+      if(!same){ grid.Rows.Clear(); foreach(var a in apps){ int r=grid.Rows.Add(a.Enabled,a.Name,TrayHelper.StateOf(a),a.Watchdog); grid.Rows[r].Tag=a; } }
+      else for(int i=0;i<apps.Count;i++){ var row=grid.Rows[i]; var a=apps[i]; row.Cells[2].Value=TrayHelper.StateOf(a);
+        if(!grid.IsCurrentCellInEditMode){ if(!Equals(row.Cells[0].Value,a.Enabled)) row.Cells[0].Value=a.Enabled; if(!Equals(row.Cells[3].Value,a.Watchdog)) row.Cells[3].Value=a.Watchdog; } }
+    }finally{ filling=false; } }
+  void AddApp(){ using(var p=new PickerForm()){ if(p.ShowDialog(this)==DialogResult.OK&&p.Result!=null){
+        foreach(var x in th.AppList) if(string.Equals(x.Name,p.Result.Name,StringComparison.OrdinalIgnoreCase)){ MessageBox.Show(this,x.Name+" is already managed.","TrayHelper"); return; }
+        th.AddApp(p.Result); RefreshRows(); } } }
+  protected override void OnFormClosing(FormClosingEventArgs e){ if(e.CloseReason==CloseReason.UserClosing){ e.Cancel=true; Hide(); return; } base.OnFormClosing(e); }
+}
+
+sealed class PickerForm:Form{
+  delegate bool EnumProc(IntPtr h,IntPtr l);
+  [DllImport("user32")] static extern bool EnumWindows(EnumProc p,IntPtr l);
+  [DllImport("user32")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32")] static extern IntPtr GetWindow(IntPtr h,uint c);
+  [DllImport("user32")] static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);
+  [DllImport("user32",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr h,StringBuilder s,int n);
+  [DllImport("user32",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr h,StringBuilder s,int n);
+  [DllImport("kernel32")] static extern IntPtr OpenProcess(uint a,bool i,uint pid);
+  [DllImport("kernel32")] static extern bool CloseHandle(IntPtr h);
+  [DllImport("kernel32",CharSet=CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr h,int f,StringBuilder s,ref int n);
+  [DllImport("kernel32",CharSet=CharSet.Unicode)] static extern int GetApplicationUserModelId(IntPtr h,ref int n,StringBuilder s);
+  public AppTarget Result; ListView lv;
+  public PickerForm(){ Text="Add app - pick a window"; Width=760; Height=420; StartPosition=FormStartPosition.CenterParent; AutoScaleMode=AutoScaleMode.Dpi;
+    lv=new ListView(); lv.Dock=DockStyle.Fill; lv.View=View.Details; lv.FullRowSelect=true; lv.MultiSelect=false;
+    lv.Columns.Add("Title",220); lv.Columns.Add("Process",110); lv.Columns.Add("Class",160); lv.Columns.Add("Exe / AUMID",250);
+    var ok=new Button(); ok.Text="Add"; ok.Dock=DockStyle.Bottom; ok.Click+=(s,e)=>Pick(); lv.DoubleClick+=(s,e)=>Pick();
+    Controls.Add(lv); Controls.Add(ok); Fill(); }
+  void Fill(){ int me=Process.GetCurrentProcess().Id;
+    EnumWindows((h,l)=>{ if(!IsWindowVisible(h)||GetWindow(h,4)!=IntPtr.Zero) return true;
+      var t=new StringBuilder(256); GetWindowText(h,t,256); if(t.Length==0) return true;
+      var c=new StringBuilder(256); GetClassName(h,c,256); uint pid; GetWindowThreadProcessId(h,out pid); if(pid==me) return true;
+      string pn=null; try{ using(var p=Process.GetProcessById((int)pid)) pn=p.ProcessName; }catch{} if(pn==null) return true;
+      string exe=null, aumid=null; var ph=OpenProcess(0x1000,false,pid);
+      if(ph!=IntPtr.Zero){ try{ var sb=new StringBuilder(1024); int n=sb.Capacity; if(QueryFullProcessImageName(ph,0,sb,ref n)) exe=sb.ToString();
+          var sa=new StringBuilder(256); int na=sa.Capacity; try{ if(GetApplicationUserModelId(ph,ref na,sa)==0) aumid=sa.ToString(); }catch(EntryPointNotFoundException){} } finally{ CloseHandle(ph); } }
+      string path=aumid!=null?"shell:AppsFolder\\"+aumid:exe;
+      var it=new ListViewItem(new string[]{t.ToString(),pn,c.ToString(),path??""}); lv.Items.Add(it); return true; },IntPtr.Zero); }
+  void Pick(){ if(lv.SelectedItems.Count==0) return; var it=lv.SelectedItems[0];
+    var a=new AppTarget(); a.WinTitle=it.SubItems[0].Text; a.Name=a.WinTitle; a.ProcName=it.SubItems[1].Text; a.WinClass=it.SubItems[2].Text; a.ExePath=it.SubItems[3].Text; a.Enabled=true; a.Watchdog=false;
+    Result=a; DialogResult=DialogResult.OK; Close(); }
 }
