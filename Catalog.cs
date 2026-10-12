@@ -2,13 +2,13 @@
 using System; using System.Collections.Generic; using System.Diagnostics; using System.IO; using Microsoft.Win32;
 
 sealed class Preset{
-  public string Name, ProcName, WinClass="Chrome_WidgetWin_1", WinTitle, AppxPrefix, AppxExe, Aumid, Note; public string[] Paths=new string[0]; public bool DefaultOn, Watchdog, NativeTray;
+  public string Name, ProcName, WinClass="Chrome_WidgetWin_1", WinTitle, AppxPrefix, AppxExe, Aumid, Note; public string[] Paths=new string[0]; public bool DefaultOn, NativeTray, AlwaysRestart;
 }
 static class Catalog{
   public static readonly Preset[] All=new Preset[]{
-    new Preset{ Name="Grok Bot", ProcName="Grok Bot", WinTitle="Grok Bot", Paths=new[]{@"%LOCALAPPDATA%\Programs\Grok Bot\Grok Bot.exe"}, DefaultOn=true },
+    new Preset{ Name="Grok Bot", ProcName="Grok Bot", WinTitle="Grok Bot", Paths=new[]{@"%LOCALAPPDATA%\Programs\Grok Bot\Grok Bot.exe"}, DefaultOn=true, AlwaysRestart=true },
     new Preset{ Name="Claude", ProcName="claude", WinTitle="Claude", AppxPrefix="Claude_", AppxExe=@"app\Claude.exe", Aumid="Claude_pzs8sxrjxfjjc!Claude", Paths=new[]{@"%LOCALAPPDATA%\AnthropicClaude\claude.exe"}, DefaultOn=true, NativeTray=true, Note="has its own tray option" },
-    new Preset{ Name="ChatGPT / Codex", ProcName="ChatGPT", WinTitle="", AppxPrefix="OpenAI.Codex_", AppxExe=@"app\ChatGPT.exe", Aumid="OpenAI.Codex_2p2nqsd0c76g0!App" },
+    new Preset{ Name="ChatGPT / Codex", ProcName="ChatGPT", WinTitle="ChatGPT", AppxPrefix="OpenAI.Codex_", AppxExe=@"app\ChatGPT.exe", Aumid="OpenAI.Codex_2p2nqsd0c76g0!App" },
     new Preset{ Name="Visual Studio Code", ProcName="Code", WinTitle="*Visual Studio Code", Paths=new[]{@"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe",@"%ProgramFiles%\Microsoft VS Code\Code.exe"} },
     new Preset{ Name="Cursor", ProcName="Cursor", WinTitle="*Cursor", Paths=new[]{@"%LOCALAPPDATA%\Programs\cursor\Cursor.exe"} },
     new Preset{ Name="Windsurf", ProcName="Windsurf", WinTitle="*Windsurf", Paths=new[]{@"%LOCALAPPDATA%\Programs\Windsurf\Windsurf.exe"} },
@@ -36,8 +36,8 @@ static class Catalog{
   public static void Merge(List<AppTarget> apps){
     foreach(var p in All){ string launch, icon; bool found=Detect(p,out launch,out icon);
       var a=apps.Find(x=>string.Equals(x.Name,p.Name,StringComparison.OrdinalIgnoreCase));
-      if(a==null){ if(!found) continue; a=new AppTarget(); a.Name=p.Name; a.ProcName=p.ProcName; a.WinClass=p.WinClass; a.WinTitle=p.WinTitle; a.ExePath=launch; a.Enabled=p.DefaultOn; a.Watchdog=p.Watchdog; apps.Add(a); TrayHelper.Log("catalog: detected "+p.Name); }
-      a.Preset=true; a.Detected=found; a.Note=p.Note; a.NativeTray=p.NativeTray; if(icon!=null) a.IconExe=icon; if(string.IsNullOrEmpty(a.ExePath)&&launch!=null) a.ExePath=launch; }
+      if(a==null){ if(!found) continue; a=new AppTarget(); a.Name=p.Name; a.ProcName=p.ProcName; a.WinClass=p.WinClass; a.WinTitle=p.WinTitle; a.ExePath=launch; a.Enabled=p.DefaultOn; apps.Add(a); TrayHelper.Log("catalog: detected "+p.Name); }
+      a.Preset=true; a.Detected=found; a.Note=p.Note; a.NativeTray=p.NativeTray; a.AlwaysRestart=a.AlwaysRestart||p.AlwaysRestart; a.ProcName=p.ProcName; a.WinClass=p.WinClass; a.WinTitle=p.WinTitle; if(icon!=null) a.IconExe=icon; if(string.IsNullOrEmpty(a.ExePath)&&launch!=null) a.ExePath=launch; }
     foreach(var a in apps) if(!a.Preset){ if(a.IconExe==null&&a.ExePath!=null&&File.Exists(a.ExePath)) a.IconExe=a.ExePath; if(a.IconExe==null) a.IconExe=RunningExe(a.ProcName); }
   }
 }

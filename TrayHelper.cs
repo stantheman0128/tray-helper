@@ -6,7 +6,7 @@ using System.Runtime.InteropServices; using System.Text; using System.Threading;
 sealed class CloseSnap{ public readonly int l,t,r,b; public CloseSnap(int l,int t,int r,int b){ this.l=l; this.t=t; this.r=r; this.b=b; } }
 
 sealed class AppTarget{
-  public string Name, ExePath, ProcName, WinClass, WinTitle, IconExe, Note; public bool Enabled=true, Watchdog=true, Preset, Detected=true, NativeTray, gaveUp;
+  public string Name, ExePath, ProcName, WinClass, WinTitle, IconExe, Note; public bool Enabled=true, Watchdog=true, Preset, Detected=true, NativeTray, gaveUp, AlwaysRestart;
   public NotifyIcon Tray; public Icon TrayIcon; public Process mainProc; public List<DateTime> relaunches=new List<DateTime>(); public DateTime nextTry=DateTime.MinValue;
   public IntPtr hwnd; public volatile CloseSnap snap;
   public bool userQuit, quitSawGone, seenRunning, hideNew; public int launchedPid;
@@ -73,7 +73,7 @@ partial class TrayHelper : ApplicationContext {
         continue; }
       if(cur==null) continue;
       int i=line.IndexOf('='); if(i<1) continue; var k=line.Substring(0,i).Trim().ToLowerInvariant(); var v=Environment.ExpandEnvironmentVariables(line.Substring(i+1).Trim());
-      if(k=="enabled") cur.Enabled=ParseBool(v); else if(k=="watchdog") cur.Watchdog=ParseBool(v);
+      if(k=="enabled") cur.Enabled=ParseBool(v); else if(k=="watchdog") cur.Watchdog=ParseBool(v); else if(k=="alwaysrestart") cur.AlwaysRestart=ParseBool(v);
       else if(v.Length==0) continue;
       else if(k=="exepath") cur.ExePath=v; else if(k=="processname") cur.ProcName=v; else if(k=="windowclass") cur.WinClass=v; else if(k=="windowtitle") cur.WinTitle=v; }
   }
@@ -110,17 +110,17 @@ partial class TrayHelper : ApplicationContext {
     sb.AppendLine("; TrayHelper config. One [App:Name] section per app. Edited by the settings window.");
     sb.AppendLine("; ExePath may be a normal exe or shell:AppsFolder\\<AUMID> for Store/MSIX apps.");
     foreach(var a in Apps){ sb.AppendLine(); sb.AppendLine("[App:"+a.Name+"]"); sb.AppendLine("Enabled="+(a.Enabled?"true":"false"));
-      sb.AppendLine("ExePath="+(a.ExePath??"")); sb.AppendLine("ProcessName="+a.ProcName); sb.AppendLine("WindowClass="+a.WinClass); sb.AppendLine("WindowTitle="+a.WinTitle); }
+      sb.AppendLine("ExePath="+(a.ExePath??"")); sb.AppendLine("ProcessName="+a.ProcName); sb.AppendLine("WindowClass="+a.WinClass); sb.AppendLine("WindowTitle="+a.WinTitle); if(a.AlwaysRestart) sb.AppendLine("AlwaysRestart=true"); }
     File.WriteAllText(IniPath,sb.ToString()); }catch(Exception ex){ Log("save ini "+ex.Message); } }
   // ---------- window tracking ----------
   static bool PidIs(uint pid,string name){ try{ using(var p=Process.GetProcessById((int)pid)) return string.Equals(p.ProcessName,name,StringComparison.OrdinalIgnoreCase); }catch{ return false; } }
   public static bool TitleOk(AppTarget a,string t){ if(string.IsNullOrEmpty(a.WinTitle)) return t.Length>0; if(a.WinTitle[0]=='*') return t.IndexOf(a.WinTitle.Substring(1),StringComparison.OrdinalIgnoreCase)>=0; return t==a.WinTitle; }
   static bool ClassOk(AppTarget a,string c){ return string.IsNullOrEmpty(a.WinClass)||c==a.WinClass; }
-  static IntPtr FindMain(AppTarget a){ IntPtr found=IntPtr.Zero; EnumWindows((h,l)=>{
+  static IntPtr FindMain(AppTarget a){ IntPtr found=IntPtr.Zero, hiddenMatch=IntPtr.Zero; EnumWindows((h,l)=>{
       var c=new StringBuilder(256); GetClassName(h,c,256); if(!ClassOk(a,c.ToString())) return true;
       if(GetWindow(h,4)!=IntPtr.Zero) return true;
       var t=new StringBuilder(256); GetWindowText(h,t,256); if(!TitleOk(a,t.ToString())) return true;
-      uint pid; GetWindowThreadProcessId(h,out pid); if(PidIs(pid,a.ProcName)){ found=h; return false; } return true; },IntPtr.Zero); return found; }
+      uint pid; GetWindowThreadProcessId(h,out pid); if(PidIs(pid,a.ProcName)){ if(IsWindowVisible(h)){ found=h; return false; } if(hiddenMatch==IntPtr.Zero) hiddenMatch=h; } return true; },IntPtr.Zero); return found!=IntPtr.Zero?found:hiddenMatch; }
   static bool ClassWindowAlive(AppTarget a){ bool f=false; EnumWindows((h,l)=>{ var c=new StringBuilder(256); GetClassName(h,c,256); if(!ClassOk(a,c.ToString())) return true;
       uint pid; GetWindowThreadProcessId(h,out pid); if(PidIs(pid,a.ProcName)){ f=true; return false; } return true; },IntPtr.Zero); return f; }
   static bool BlocksRelaunch(AppTarget a){
@@ -140,7 +140,7 @@ partial class TrayHelper : ApplicationContext {
   void Tick(){
     if(exiting||inTick) return; inTick=true; var sw=Stopwatch.StartNew();
     try{
-      if(!booted){ booted=true; try{ ui=new UiWin(this); ui.Open(); uiHwnd=ui.Handle; }catch(Exception ex){ Log("ui "+ex.Message); } sync=SynchronizationContext.Current; Log("started dpi="+dpiMode+" apps="+Apps.Count); }
+      if(!booted){ booted=true; try{ ui=new UiWin(this); ui.Open(); uiHwnd=ui.Handle; }catch(Exception ex){ Log("ui "+ex.Message); } sync=SynchronizationContext.Current; Log("started dpi="+dpiMode+" apps="+Apps.Count); foreach(var x in Apps) if(x.AlwaysRestart) Log(x.Name+": AlwaysRestart=on (relaunch on any exit unless quit from TrayHelper menu)"); }
       EnsureHooks();
       foreach(var a in Apps) TickApp(a);
       snapApps=Apps.ToArray();
@@ -165,7 +165,7 @@ partial class TrayHelper : ApplicationContext {
     if(running&&a.Enabled&&!a.userQuit&&IsWindowVisible(a.hwnd)) UpdateCloseRect(a); else a.snap=null; }
   void WriteStatus(){ try{ var sb=new StringBuilder();
     sb.AppendFormat("time={0}\r\nhelperPid={1}\r\ndpi={2}\r\nmouseHook={3}\r\nkeyHook={4}\r\n",DateTime.Now.ToString("s"),MyPid,dpiMode,mHook,kHook);
-    foreach(var a in Apps){ var s=a.snap; sb.AppendFormat("[{0}] enabled={1} watchdog={2} hwnd={3} state={4} closeRect={5}\r\n",a.Name,a.Enabled,a.gaveUp?"gave-up":"on",a.hwnd,State(a),s==null?"none":(s.l+","+s.t+","+s.r+","+s.b)); }
+    foreach(var a in Apps){ var s=a.snap; sb.AppendFormat("[{0}] enabled={1} watchdog={2} hwnd={3} state={4} closeRect={5}\r\n",a.Name,a.Enabled,(a.gaveUp?"gave-up":"on")+(a.AlwaysRestart?" alwaysRestart=on":""),a.hwnd,State(a),s==null?"none":(s.l+","+s.t+","+s.r+","+s.b)); }
     File.WriteAllText(Path.Combine(Dir,"status.txt"),sb.ToString()); }catch{} }
 
   uint WinDpi(IntPtr h){ if(dpiWinMissing) return 96; try{ uint d=GetDpiForWindow(h); return d==0?96:d; }catch(EntryPointNotFoundException){ dpiWinMissing=true; return 96; } }
@@ -222,7 +222,7 @@ partial class TrayHelper : ApplicationContext {
 
   static void HoldProc(AppTarget a){ try{ if(a.mainProc!=null){ a.mainProc.Dispose(); a.mainProc=null; } uint pid; GetWindowThreadProcessId(a.hwnd,out pid); var p=Process.GetProcessById((int)pid); var hh=p.Handle; a.mainProc=p; }catch{ a.mainProc=null; } }
   // App quit itself cleanly (its own Quit menu) -> exit code 0 -> treat like a user quit, no relaunch.
-  static void CheckCleanExit(AppTarget a){ try{ if(a.mainProc!=null&&a.mainProc.WaitForExit(1500)&&a.mainProc.ExitCode==0&&!a.hideNew){ a.userQuit=true; a.quitSawGone=true; Log(a.Name+": exited cleanly (code 0), no relaunch"); } else if(a.mainProc!=null&&a.mainProc.HasExited) Log(a.Name+": exited code "+a.mainProc.ExitCode); }catch{} }
+  static void CheckCleanExit(AppTarget a){ try{ if(a.AlwaysRestart){ if(a.mainProc!=null&&a.mainProc.HasExited) Log(a.Name+": exited code "+a.mainProc.ExitCode+", AlwaysRestart -> will relaunch"); return; } if(a.mainProc!=null&&a.mainProc.WaitForExit(1500)&&a.mainProc.ExitCode==0&&!a.hideNew){ a.userQuit=true; a.quitSawGone=true; Log(a.Name+": exited cleanly (code 0), no relaunch"); } else if(a.mainProc!=null&&a.mainProc.HasExited) Log(a.Name+": exited code "+a.mainProc.ExitCode); }catch{} }
   void SyncAppTray(AppTarget a,bool running){
     bool want=running&&a.Enabled&&!a.NativeTray&&!exiting;
     if(!want){ if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } return; }
