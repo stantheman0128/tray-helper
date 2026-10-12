@@ -9,6 +9,6 @@ $out = Join-Path $here 'dist\TrayHelper.exe'
 if (-not (Test-Path (Join-Path $here 'dist\tray-helper.ini'))) { Copy-Item (Join-Path $here 'tray-helper.ini') (Join-Path $here 'dist') }
 $refs = @('System.Windows.Forms.dll','System.Drawing.dll','System.Core.dll',"$fw\System.Xaml.dll","$wpf\WindowsBase.dll","$wpf\PresentationCore.dll","$wpf\PresentationFramework.dll","$wpf\WindowsFormsIntegration.dll") | % { "/r:$_" }
 $ico = Join-Path $here 'assets\app.ico'; $png = Join-Path $here 'assets\logo.png'
-& "$fw\csc.exe" /nologo /target:winexe /optimize+ "/out:$out" "/win32icon:$ico" "/resource:$ico,app.ico" "/resource:$png,logo.png" $refs (Join-Path $here 'TrayHelper.cs') (Join-Path $here 'Catalog.cs') (Join-Path $here 'Ui.cs') (Join-Path $here 'Scanner.cs')
+& "$fw\csc.exe" /nologo /codepage:65001 /target:winexe /optimize+ "/out:$out" "/win32icon:$ico" "/resource:$ico,app.ico" "/resource:$png,logo.png" $refs (Join-Path $here 'TrayHelper.cs') (Join-Path $here 'Catalog.cs') (Join-Path $here 'Ui.cs') (Join-Path $here 'Scanner.cs')
 if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE)" }
 Write-Host "Built $out"
