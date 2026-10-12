@@ -28,3 +28,10 @@ Current stage: **MVP** (speed over polish). Grok CLI will handle the hardening, 
 - Hotkey to show or hide apps.
 - Live reload when the ini is edited by hand.
 - Optional code signing to cut AV false positives.
+
+## Notes (MVP 0.4)
+- Keyboard interception: Alt+F4 is always intercepted for apps with close-to-tray on. Ctrl+Q / Ctrl+W are intercepted only when the app's main window is in the foreground, and only when enabled per app with `InterceptCtrlQ=true` / `InterceptCtrlW=true` in the ini. Defaults: Ctrl+Q is on for Thunderbird (where it quits the app). Ctrl+W is off everywhere, because in most apps it closes a tab, not the window.
+- Close-button geometry is recalculated whenever a managed window moves or resizes (WinEvent LOCATIONCHANGE, 60 ms debounce), and every second as a backstop, so it works when maximized, restored, on any monitor and at any DPI.
+- The watchdog only runs, silently, for Grok Bot (the remote-access path). No other app is auto-restarted.
+- Add all open windows: the exclusion list is editable (stored as `Exclude=` in `[General]`). Elevated apps are flagged "needs TrayHelper run as admin". UWP windows (ApplicationFrameHost) are flagged as unreliable.
+- TODO: record a demo GIF to `assets/demo.gif` (the About page shows it when present).
