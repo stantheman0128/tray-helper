@@ -90,12 +90,23 @@ static class Theme{
     el.DragOver+=(s,e)=>{ e.Effects=e.Data.GetDataPresent("th-app")?DragDropEffects.Move:DragDropEffects.None; e.Handled=true; };
     el.Drop+=(s,e)=>{ var src=e.Data.GetData("th-app") as AppTarget; if(src==null||src==a) return; bool after=e.GetPosition(el).Y>el.ActualHeight/2; drop(src,a,after); e.Handled=true; }; }
   static bool InButton(DependencyObject d){ while(d!=null){ if(d is System.Windows.Controls.Primitives.ButtonBase) return true; d=d is Visual?VisualTreeHelper.GetParent(d):LogicalTreeHelper.GetParent(d); } return false; }
+  // Grip-based reorder with mouse capture (no OLE drag-drop). Rows in the panel carry Tag=AppTarget.
+  public static void Reorderable(Panel panel,FrameworkElement row,FrameworkElement grip,Action<List<AppTarget>> commit){
+    bool drag=false; grip.Cursor=System.Windows.Input.Cursors.SizeNS;
+    grip.MouseLeftButtonDown+=(s,e)=>{ drag=grip.CaptureMouse(); row.Opacity=0.6; e.Handled=true; };
+    grip.MouseMove+=(s,e)=>{ if(!drag) return; var y=e.GetPosition(panel).Y; int cur=panel.Children.IndexOf(row); int target=cur;
+      for(int i=0;i<panel.Children.Count;i++){ var c=panel.Children[i] as FrameworkElement; if(c==null||!(c.Tag is AppTarget)) continue; var top=c.TranslatePoint(new Point(0,0),panel).Y; if(y>=top&&y<top+c.ActualHeight){ target=i; break; } }
+      if(target!=cur){ panel.Children.RemoveAt(cur); panel.Children.Insert(target,row); } };
+    grip.MouseLeftButtonUp+=(s,e)=>{ if(!drag) return; drag=false; grip.ReleaseMouseCapture(); row.Opacity=1; var order=new List<AppTarget>(); foreach(var c in panel.Children){ var fe=c as FrameworkElement; if(fe!=null&&fe.Tag is AppTarget) order.Add((AppTarget)fe.Tag); } commit(order); e.Handled=true; };
+    grip.LostMouseCapture+=(s,e)=>{ if(drag){ drag=false; row.Opacity=1; } }; }
+  public static TextBlock Grip(){ var g=T("⋮⋮",14,Sub,FontWeights.Bold); g.ToolTip="Drag to reorder"; g.Margin=new Thickness(0,0,10,0); g.Background=Brushes.Transparent; g.Padding=new Thickness(2,6,2,6); return g; }
   public static string StatusText(AppTarget a){ var s=TrayHelper.StateOf(a); string t=s=="hidden"?"Hidden in tray":s=="visible"?"Running":"Not running"; if(!string.IsNullOrEmpty(a.Note)) t+=" · "+a.Note; return t; }
 }
 
 partial class TrayHelper{
   Window flyout; SettingsWindow settingsWin;
   static IEnumerable<AppTarget> Visible(){ return Apps.Where(a=>a.Detected||!a.Preset).ToList(); }
+  public void ApplyOrder(List<AppTarget> order){ var idx=order.Select(x=>Apps.IndexOf(x)).Where(i=>i>=0).OrderBy(i=>i).ToList(); for(int k=0;k<idx.Count&&k<order.Count;k++) Apps[idx[k]]=order[k]; snapApps=Apps.ToArray(); SaveAll(); Log("reordered"); }
   public void Reorder(AppTarget src,AppTarget target,bool after){ AppTarget before=target; if(after){ int i=Apps.IndexOf(target); before=i+1<Apps.Count?Apps[i+1]:null; if(before==src){ before=i+2<Apps.Count?Apps[i+2]:null; } } Move(src,before); Log("reordered "+src.Name); }
   static void Interop(Window w){ try{ System.Windows.Forms.Integration.ElementHost.EnableModelessKeyboardInterop(w); }catch{} }
   public void ShowFlyout(){
@@ -120,19 +131,19 @@ partial class TrayHelper{
     { var row=new Grid(); row.Margin=new Thickness(12,9,12,9); row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto}); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
       row.Children.Add(Theme.Img(Theme.Logo,24)); var tx=new StackPanel(); tx.Margin=new Thickness(12,0,8,0); tx.VerticalAlignment=VerticalAlignment.Center; tx.Children.Add(Theme.T("TrayHelper",13.5,Theme.Text,FontWeights.Normal)); tx.Children.Add(Theme.T("Start with Windows",11.5,Theme.Sub,FontWeights.Normal)); Grid.SetColumn(tx,1); row.Children.Add(tx);
       var sw=Theme.Switch(StartWithWindows); sw.Click+=(s,e)=>StartWithWindows=sw.IsChecked==true; Grid.SetColumn(sw,2); row.Children.Add(sw); rows.Children.Add(row); }
-    foreach(var a0 in Visible()){ var a=a0;
-      var row=new Grid(); row.Margin=new Thickness(12,9,12,9);
-      row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto}); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
-      row.Children.Add(Theme.Img(Theme.AppIcon(a.IconExe),24));
+    foreach(var a0 in Apps.Where(x=>x.Enabled&&!x.Native&&x.Running).ToList()){ var a=a0;
+      var row=new Grid(); row.Margin=new Thickness(6,9,12,9);
+      row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto}); row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto}); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
+      var grip=Theme.Grip(); row.Children.Add(grip); var ic=Theme.Img(Theme.AppIcon(a.IconExe),24); Grid.SetColumn(ic,1); row.Children.Add(ic);
       var tx=new StackPanel(); tx.Margin=new Thickness(12,0,8,0); tx.VerticalAlignment=VerticalAlignment.Center; tx.Children.Add(Theme.T(a.Name,13.5,Theme.Text,FontWeights.Normal)); tx.Children.Add(Theme.T(Theme.StatusText(a),11.5,Theme.Sub,FontWeights.Normal));
-      Grid.SetColumn(tx,1); row.Children.Add(tx);
-      if(a.Native){ var nl=Theme.T("Native",12,Theme.Sub,FontWeights.Normal); nl.ToolTip=a.Hint; Grid.SetColumn(nl,2); row.Children.Add(nl); } else { var sw=Theme.Switch(a.Enabled); sw.Click+=(s,e)=>SetEnabled(a,sw.IsChecked==true); Grid.SetColumn(sw,2); row.Children.Add(sw); }
-      var wrap=new Border(); wrap.Child=row; wrap.Background=Brushes.Transparent; wrap.Cursor=System.Windows.Input.Cursors.Hand; wrap.ToolTip="Click to show "+a.Name+" · drag to reorder";
+      Grid.SetColumn(tx,2); row.Children.Add(tx);
+      if(a.Native){ var nl=Theme.T("Native",12,Theme.Sub,FontWeights.Normal); nl.ToolTip=a.Hint; Grid.SetColumn(nl,3); row.Children.Add(nl); } else { var sw=Theme.Switch(a.Enabled); sw.Click+=(s,e)=>SetEnabled(a,sw.IsChecked==true); Grid.SetColumn(sw,3); row.Children.Add(sw); }
+      var wrap=new Border(); wrap.Child=row; wrap.Background=Brushes.Transparent; wrap.Cursor=System.Windows.Input.Cursors.Hand; wrap.ToolTip="Click to show "+a.Name+"";
       tx.MouseLeftButtonUp+=(s,e)=>{ flyout.Hide(); ShowApp(a); };
       wrap.BorderBrush=Theme.Line; wrap.BorderThickness=new Thickness(0,1,0,0);
-      Theme.Draggable(wrap,a,(src,t,after)=>{ Reorder(src,t,after); ShowFlyout(); if(settingsWin!=null&&settingsWin.IsVisible) settingsWin.Rebuild(); });
+      wrap.Tag=a; Theme.Reorderable(rows,wrap,grip,order=>{ ApplyOrder(order); if(settingsWin!=null&&settingsWin.IsVisible) settingsWin.Rebuild(); });
       rows.Children.Add(wrap); }
-    if(first){ var none=Theme.T("No supported apps found.",13,Theme.Sub,FontWeights.Normal); none.Margin=new Thickness(12); rows.Children.Add(none); }
+    if(rows.Children.Count<=1){ var none=Theme.T("No managed apps are running.",13,Theme.Sub,FontWeights.Normal); none.Margin=new Thickness(12); rows.Children.Add(none); }
     st.Children.Add(list);
     var foot=new DockPanel(); foot.Margin=new Thickness(0,8,0,0);
     var exit=Theme.MkBtn(Theme.T("Exit",12.5,Theme.Sub,FontWeights.Normal),"Link"); exit.ToolTip="Exit TrayHelper (hidden windows are restored)"; exit.Click+=(s,e)=>{ flyout.Hide(); ExitHelper(); }; DockPanel.SetDock(exit,Dock.Right); foot.Children.Add(exit);
@@ -218,28 +229,32 @@ sealed class SettingsWindow:Window{
       var sw=Labeled("Start with Windows",TrayHelper.StartWithWindows,v=>TrayHelper.StartWithWindows=v); Grid.SetColumn(sw,2); g.Children.Add(sw); st.Children.Add(Card(g)); }
     var all=TrayHelper.Apps.Where(x=>x.Detected||!x.Preset).ToList();
     var managed=all.Where(x=>!x.Native).ToList(); var native=all.Where(x=>x.Native).ToList();
+    var mpanel=new StackPanel(); st.Children.Add(mpanel);
     foreach(var a0 in managed){ var a=a0;
-      var g=new Grid(); foreach(var w in new[]{GridLength.Auto,new GridLength(1,GridUnitType.Star),GridLength.Auto,GridLength.Auto,GridLength.Auto}) g.ColumnDefinitions.Add(new ColumnDefinition{Width=w});
+      var outerG=new Grid(); outerG.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto}); outerG.ColumnDefinitions.Add(new ColumnDefinition());
+      var gripA=Theme.Grip(); outerG.Children.Add(gripA);
+      var g=new Grid(); Grid.SetColumn(g,1); outerG.Children.Add(g); foreach(var w in new[]{GridLength.Auto,new GridLength(1,GridUnitType.Star),GridLength.Auto,GridLength.Auto,GridLength.Auto}) g.ColumnDefinitions.Add(new ColumnDefinition{Width=w});
       g.Children.Add(Theme.Img(Theme.AppIcon(a.IconExe),32));
       var tx=new StackPanel(); tx.Margin=new Thickness(14,0,12,0); tx.VerticalAlignment=VerticalAlignment.Center;
       tx.Children.Add(Theme.T(a.Name+(a.Preset?"":"  (custom)"),14,Theme.Text,FontWeights.Normal)); var stt=Theme.T(Theme.StatusText(a),12,Theme.Sub,FontWeights.Normal); statusLabels[a]=stt; tx.Children.Add(stt);
       Grid.SetColumn(tx,1); g.Children.Add(tx);
       var show=Theme.MkBtn("Show","Btn"); show.Click+=(s,e)=>th.Show_(a); show.Margin=new Thickness(0,0,16,0); Grid.SetColumn(show,2); g.Children.Add(show);
-      var gripT=Theme.Glyph("\uE76F",14,Theme.Sub); gripT.ToolTip="Drag to reorder"; gripT.Margin=new Thickness(0,0,14,0); Grid.SetColumn(gripT,3); g.Children.Add(gripT);
+
       var ct=Labeled("Close to tray",a.Enabled,v=>th.SetEnabled(a,v)); Grid.SetColumn(ct,4); g.Children.Add(ct);
-      var card=Card(g); Theme.Draggable(card,a,(src,t,after)=>{ th.Reorder(src,t,after); Rebuild(); });
+      var card=Card(outerG); card.Tag=a; Theme.Reorderable(mpanel,card,gripA,order=>th.ApplyOrder(order));
       if(!a.Preset){ var cm=new ContextMenu(); var mi=new MenuItem(); mi.Header="Remove "+a.Name; mi.Click+=(s,e)=>{ if(MessageBox.Show(this,"Remove "+a.Name+" from TrayHelper?","TrayHelper",MessageBoxButton.YesNo)==MessageBoxResult.Yes){ th.RemoveApp(a); Rebuild(); } }; cm.Items.Add(mi); card.ContextMenu=cm; card.ToolTip="Right-click to remove"; }
-      st.Children.Add(card); }
+      mpanel.Children.Add(card); }
     if(native.Count>0){ var nh=Theme.T("Natively supported",15,Theme.Text,FontWeights.SemiBold); nh.Margin=new Thickness(2,18,0,2); st.Children.Add(nh);
       var nd=Theme.T("These apps already have their own close-to-tray / background option. Turn it on in the app instead.",12.5,Theme.Sub,FontWeights.Normal); nd.TextWrapping=TextWrapping.Wrap; nd.Margin=new Thickness(2,0,0,8); st.Children.Add(nd);
+      var npanel=new StackPanel(); st.Children.Add(npanel);
       foreach(var a0 in native){ var a=a0;
-        var g=new Grid(); foreach(var w in new[]{GridLength.Auto,new GridLength(1,GridUnitType.Star),GridLength.Auto}) g.ColumnDefinitions.Add(new ColumnDefinition{Width=w});
-        g.Children.Add(Theme.Img(Theme.AppIcon(a.IconExe),32));
+        var g=new Grid(); foreach(var w in new[]{GridLength.Auto,GridLength.Auto,new GridLength(1,GridUnitType.Star),GridLength.Auto}) g.ColumnDefinitions.Add(new ColumnDefinition{Width=w});
+        var gripN=Theme.Grip(); g.Children.Add(gripN); var nic=Theme.Img(Theme.AppIcon(a.IconExe),32); Grid.SetColumn(nic,1); g.Children.Add(nic);
         var tx=new StackPanel(); tx.Margin=new Thickness(14,0,12,0); tx.VerticalAlignment=VerticalAlignment.Center; tx.Children.Add(Theme.T(a.Name,14,Theme.Text,FontWeights.Normal));
-        var hint=Theme.T(a.Hint??"Option is in app settings",12,Theme.Sub,FontWeights.Normal); hint.TextWrapping=TextWrapping.Wrap; tx.Children.Add(hint); Grid.SetColumn(tx,1); g.Children.Add(tx);
-        var ob=Theme.MkBtn("Open settings","Btn"); ob.ToolTip="Opens the app so you can change the option"; ob.Click+=(s,e)=>th.OpenAppSettings(a); Grid.SetColumn(ob,2); g.Children.Add(ob);
-        var nc=Card(g); Theme.Draggable(nc,a,(src,t,after)=>{ th.Reorder(src,t,after); Rebuild(); }); st.Children.Add(nc); } }
-    var hn=Theme.T("Drag cards to reorder (same order as the tray panel). Custom apps: right-click a card to remove it.",12,Theme.Sub,FontWeights.Normal); hn.Margin=new Thickness(2,10,0,0); st.Children.Add(hn);
+        var hint=Theme.T(a.Hint??"Option is in app settings",12,Theme.Sub,FontWeights.Normal); hint.TextWrapping=TextWrapping.Wrap; tx.Children.Add(hint); Grid.SetColumn(tx,2); g.Children.Add(tx);
+        var ob=Theme.MkBtn("Open settings","Btn"); ob.ToolTip="Opens the app so you can change the option"; ob.Click+=(s,e)=>th.OpenAppSettings(a); Grid.SetColumn(ob,3); g.Children.Add(ob);
+        var nc=Card(g); nc.Tag=a; Theme.Reorderable(npanel,nc,gripN,order=>th.ApplyOrder(order)); npanel.Children.Add(nc); } }
+    var hn=Theme.T("Drag the ⋮⋮ handle to reorder (same order as the tray panel). Custom apps: right-click a card to remove it.",12,Theme.Sub,FontWeights.Normal); hn.Margin=new Thickness(2,10,0,0); st.Children.Add(hn);
     return st; }
   static StackPanel Labeled(string label,bool on,Action<bool> set){ var sp=new StackPanel(); sp.Orientation=Orientation.Horizontal; sp.VerticalAlignment=VerticalAlignment.Center;
     var t=Theme.T(label,12.5,Theme.Sub,FontWeights.Normal); t.Margin=new Thickness(0,0,10,0); sp.Children.Add(t); var sw=Theme.Switch(on); sw.Click+=(s,e)=>set(sw.IsChecked==true); sp.Children.Add(sw); return sp; }
@@ -374,26 +389,12 @@ sealed class AddAllWindow:Window{
     var sv=new ScrollViewer(); sv.VerticalScrollBarVisibility=ScrollBarVisibility.Auto; var bd=new Border(); bd.Background=Theme.Card; bd.BorderBrush=Theme.Line; bd.BorderThickness=new Thickness(1); bd.CornerRadius=new CornerRadius(6); list=new StackPanel(); list.Margin=new Thickness(8); sv.Content=list; bd.Child=sv; dp.Children.Add(bd);
     Content=dp; Fill(); }
   void SaveExcl(){ TrayHelper.Exclude=excl.Text.Split(',').Select(x=>x.Trim()).Where(x=>x.Length>0).ToList(); TrayHelper.SaveAll(); }
-  void Fill(){ list.Children.Clear(); rows.Clear(); int me=Process.GetCurrentProcess().Id; bool selfAdmin=SelfElevated();
-    var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    foreach(var a in TrayHelper.Apps) if(a.ProcName!=null) seen.Add(a.ProcName);
-    foreach(var x in TrayHelper.Exclude) seen.Add(x);
-    EnumWindows((h,l)=>{ if(!IsWindowVisible(h)||GetWindow(h,4)!=IntPtr.Zero) return true; int cloaked; if(DwmGetWindowAttribute(h,14,out cloaked,4)==0&&cloaked!=0) return true;
-      var t=new StringBuilder(256); GetWindowText(h,t,256); if(t.Length==0) return true; var c=new StringBuilder(256); GetClassName(h,c,256); var cls=c.ToString();
-      if(cls=="Progman"||cls=="Shell_TrayWnd"||cls=="WorkerW") return true;
-      uint pid; GetWindowThreadProcessId(h,out pid); if(pid==me) return true;
-      string pn=null; try{ using(var p=Process.GetProcessById((int)pid)) pn=p.ProcessName; }catch{} if(pn==null) return true;
-      bool uwp=pn.Equals("ApplicationFrameHost",StringComparison.OrdinalIgnoreCase); string key=uwp?"uwp:"+t:pn;
-      if(seen.Contains(pn)&&!uwp) return true; if(!seen.Add(key)) return true;
-      string exe=null, aumid=null; var ph=OpenProcess(0x1000,false,pid);
-      if(ph!=IntPtr.Zero){ try{ var sbb=new StringBuilder(1024); int n=sbb.Capacity; if(QueryFullProcessImageName(ph,0,sbb,ref n)) exe=sbb.ToString(); var sa=new StringBuilder(256); int na=sa.Capacity; try{ if(GetApplicationUserModelId(ph,ref na,sa)==0) aumid=sa.ToString(); }catch(EntryPointNotFoundException){} }finally{ CloseHandle(ph); } }
-      bool unknown; bool elev=Elevated(pid,out unknown)&&!selfAdmin;
-      var a=new AppTarget(); a.ProcName=pn; a.WinClass=cls; a.WinTitle=uwp?t.ToString():""; a.ExePath=aumid!=null?@"shell:AppsFolder\"+aumid:exe; a.IconExe=exe; a.Enabled=true; a.Preset=false; a.Detected=true;
-      string nm; if(!Known.TryGetValue(pn,out nm)){ nm=null; try{ if(exe!=null){ var vi=FileVersionInfo.GetVersionInfo(exe); nm=!string.IsNullOrEmpty(vi.FileDescription)?vi.FileDescription:vi.ProductName; } }catch{} } if(uwp) nm=t.ToString(); a.Name=string.IsNullOrEmpty(nm)?pn:nm;
-      string note=elev?"needs TrayHelper run as admin (app is elevated)":uwp?"Store/UWP window, hiding may be unreliable":null; a.Note=note;
-      var cb=new CheckBox(); cb.IsChecked=!elev&&!uwp; cb.VerticalAlignment=VerticalAlignment.Center; cb.Margin=new Thickness(4,0,10,0);
-      var row=new StackPanel(); row.Orientation=Orientation.Horizontal; row.Margin=new Thickness(2,5,2,5); row.Children.Add(cb); row.Children.Add(Theme.Img(Theme.AppIcon(exe),24));
-      var tx=new StackPanel(); tx.Margin=new Thickness(10,0,0,0); tx.Children.Add(Theme.T(a.Name,13.5,Theme.Text,FontWeights.Normal)); tx.Children.Add(Theme.T(pn+"  ·  "+cls+(note!=null?"  ·  "+note:""),11.5,elev?Theme.Accent:Theme.Sub,FontWeights.Normal)); row.Children.Add(tx);
-      list.Children.Add(row); rows.Add(Tuple.Create(cb,a)); return true; },IntPtr.Zero);
-    if(rows.Count==0){ var n=Theme.T("Nothing new to add.",13,Theme.Sub,FontWeights.Normal); n.Margin=new Thickness(8); list.Children.Add(n); } }
+  void Fill(){ list.Children.Clear(); rows.Clear(); var exl=new List<string>();
+    foreach(var cd in Scanner.Scan(exl)){ var a=cd.App;
+      var cb=new CheckBox(); cb.IsChecked=cd.Suggest; cb.VerticalAlignment=VerticalAlignment.Center; cb.Margin=new Thickness(4,0,10,0);
+      var row=new StackPanel(); row.Orientation=Orientation.Horizontal; row.Margin=new Thickness(2,5,2,5); row.Children.Add(cb); row.Children.Add(Theme.Img(Theme.AppIcon(a.IconExe),24));
+      var tx=new StackPanel(); tx.Margin=new Thickness(10,0,0,0); tx.Children.Add(Theme.T(a.Name,13.5,Theme.Text,FontWeights.Normal)); tx.Children.Add(Theme.T(a.ProcName+"  ·  "+a.WinClass+(a.Note!=null?"  ·  "+a.Note:""),11.5,a.Note!=null?Theme.Accent:Theme.Sub,FontWeights.Normal)); row.Children.Add(tx);
+      list.Children.Add(row); rows.Add(Tuple.Create(cb,a)); }
+    if(rows.Count==0){ var n=Theme.T("Nothing new to add.",13,Theme.Sub,FontWeights.Normal); n.Margin=new Thickness(8); list.Children.Add(n); }
+    if(exl.Count>0){ var e=Theme.T("Skipped: "+string.Join("; ",exl.Distinct()),11.5,Theme.Sub,FontWeights.Normal); e.TextWrapping=TextWrapping.Wrap; e.Margin=new Thickness(8,10,8,4); list.Children.Add(e); } }
 }
