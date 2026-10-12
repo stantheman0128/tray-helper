@@ -224,8 +224,9 @@ class TrayHelper : ApplicationContext {
     var a=pendApp; int kind=pendKind, x=pendX, y=pendY; pendApp=null; pendKind=0; Interlocked.Exchange(ref hideQueued,0);
     if(exiting||a==null||kind==0) return; IntPtr h=a.hwnd;
     if(h==IntPtr.Zero||!IsWindow(h)||!IsWindowVisible(h)) return;
-    if(kind==1){ var s=a.snap; if(s==null||!(x>=s.l&&x<s.r&&y>=s.t&&y<s.b)) return;
-      var p=new POINT(); p.x=x; p.y=y; var under=WindowFromPoint(p); if(under==IntPtr.Zero||GetAncestor(under,2)!=h) return; }
+    if(kind==1){ var s=a.snap; if(s==null||!(x>=s.l&&x<s.r&&y>=s.t&&y<s.b)){ Log(a.Name+": skip, rect moved"); return; }
+      var p=new POINT(); p.x=x; p.y=y; var under=WindowFromPoint(p); var root=under==IntPtr.Zero?IntPtr.Zero:GetAncestor(under,2);
+      if(root!=h){ Log(a.Name+": skip, under="+under+" root="+root+" at "+x+","+y); return; } }
     ShowWindow(h,0); a.snap=null; a.hiddenAt=DateTime.Now; Log(a.Name+": hid ("+(kind==1?"X":"alt+f4")+")"); }
 
   void ShowApp(AppTarget a){ a.userQuit=false; a.quitSawGone=false; a.hideNew=false;
