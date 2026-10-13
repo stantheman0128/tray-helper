@@ -10,16 +10,17 @@ sealed class AppTarget{ public bool wasMax, wasMin; public bool geoLogged;
   public string Id, Hint, SettingsKeys; public bool CtrlQ, CtrlW; public bool IsGrok{ get{ return Id=="grokbot"; } }
   public volatile bool moved; public NotifyIcon Tray; public Icon TrayIcon; public Process mainProc; public List<DateTime> relaunches=new List<DateTime>(); public DateTime nextTry=DateTime.MinValue;
   public IntPtr hwnd; public volatile CloseSnap snap;
-  public bool userQuit, quitSawGone, seenRunning, hideNew; public int launchedPid;
+  public bool userQuit, quitSawGone, seenRunning, hideNew, Temp, vd; public int launchedPid;
   public DateTime goneSince=DateTime.MaxValue, lastLaunch=DateTime.MinValue, hiddenAt=DateTime.MinValue;
   public int aL,aT,aR,aB;
   public bool Running{ get{ return hwnd!=IntPtr.Zero && TrayHelper.IsWindow(hwnd); } }
-  public bool Hidden{ get{ return Running && !TrayHelper.IsWindowVisible(hwnd); } }
+  public bool Hidden{ get{ return Running && (vd || !TrayHelper.IsWindowVisible(hwnd)); } }
 }
 
 partial class TrayHelper : ApplicationContext {
-  internal const string Version="0.6.1";
-  internal static string HkRestoreAll="Ctrl+Alt+Up";
+  internal const string Version="0.7.0";
+  internal static string HkRestoreAll="Ctrl+Alt+Up", HkSendToTray="Ctrl+Alt+Down"; internal static bool UwpVd=true;
+  internal static List<AppTarget> Temps=new List<AppTarget>();
   internal static bool OpenMaximized=true; internal static double WinW=0,WinH=0,WinL=double.NaN,WinT=double.NaN; internal static bool WinMax=true; internal static long MaxLogBytes=256*1024; internal static int StartDelay=0; internal static List<string> Exclude=new List<string>{"Raycast","chrome","msedge","firefox","explorer","TrayHelper","Grok Bot","ShellExperienceHost","SearchHost","StartMenuExperienceHost","TextInputHost","LockApp"}; internal static bool NotifyFirstHide=true, LogVerbose=false; const int WM_HIDE=0x8001;
   const int SM_CXSIZE=30, SM_CYSIZE=31, SM_CXFRAME=32, SM_CYFRAME=33, SM_CXPADDEDBORDER=92;
   internal static string Dir, IniPath, dpiMode="unaware"; static int MyPid;
@@ -81,7 +82,7 @@ partial class TrayHelper : ApplicationContext {
         if(s.StartsWith("App:",StringComparison.OrdinalIgnoreCase)){ cur=new AppTarget(); cur.Name=s.Substring(4).Trim(); cur.ProcName=cur.Name; cur.WinTitle=cur.Name; cur.WinClass="Chrome_WidgetWin_1"; Apps.Add(cur); }
         continue; }
       if(cur==null&&inGeneral){ int gi=line.IndexOf('='); if(gi<1) continue; var gk=line.Substring(0,gi).Trim().ToLowerInvariant(); var gv=line.Substring(gi+1).Trim(); int n;
-        if(gk=="hotkeyrestoreall") HkRestoreAll=gv; else if(gk=="exclude"){ Exclude=new List<string>(gv.Split(new[]{','},StringSplitOptions.RemoveEmptyEntries).Select(x=>x.Trim())); } else if(gk=="startdelay"&&int.TryParse(gv,out n)) StartDelay=n; else if(gk=="notifyfirsthide"||gk=="notifications") NotifyFirstHide=ParseBool(gv); else if(gk=="settingsopen") OpenMaximized=!gv.Equals("last",StringComparison.OrdinalIgnoreCase); else if(gk=="settingsbounds"){ var pp=gv.Split(','); double[] bv=new double[4]; bool ok=pp.Length>=4; for(int q=0;ok&&q<4;q++) ok=double.TryParse(pp[q],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out bv[q]); if(ok){ WinL=bv[0]; WinT=bv[1]; WinW=bv[2]; WinH=bv[3]; } if(pp.Length>=5) WinMax=pp[4]=="max"; } else if(gk=="settingssize"){ var pp=gv.Split('x'); double w,hh; if(pp.Length==2&&double.TryParse(pp[0],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out w)&&double.TryParse(pp[1],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out hh)){ WinW=w; WinH=hh; } } else if(gk=="loglevel") LogVerbose=gv.Equals("verbose",StringComparison.OrdinalIgnoreCase); else if(gk=="maxlogkb"&&int.TryParse(gv,out n)) MaxLogBytes=Math.Max(32,n)*1024L; continue; }
+        if(gk=="hotkeyrestoreall") HkRestoreAll=gv; else if(gk=="hotkeysendtotray") HkSendToTray=gv; else if(gk=="uwpvirtualdesktop") UwpVd=ParseBool(gv); else if(gk=="exclude"){ Exclude=new List<string>(gv.Split(new[]{','},StringSplitOptions.RemoveEmptyEntries).Select(x=>x.Trim())); } else if(gk=="startdelay"&&int.TryParse(gv,out n)) StartDelay=n; else if(gk=="notifyfirsthide"||gk=="notifications") NotifyFirstHide=ParseBool(gv); else if(gk=="settingsopen") OpenMaximized=!gv.Equals("last",StringComparison.OrdinalIgnoreCase); else if(gk=="settingsbounds"){ var pp=gv.Split(','); double[] bv=new double[4]; bool ok=pp.Length>=4; for(int q=0;ok&&q<4;q++) ok=double.TryParse(pp[q],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out bv[q]); if(ok){ WinL=bv[0]; WinT=bv[1]; WinW=bv[2]; WinH=bv[3]; } if(pp.Length>=5) WinMax=pp[4]=="max"; } else if(gk=="settingssize"){ var pp=gv.Split('x'); double w,hh; if(pp.Length==2&&double.TryParse(pp[0],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out w)&&double.TryParse(pp[1],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out hh)){ WinW=w; WinH=hh; } } else if(gk=="loglevel") LogVerbose=gv.Equals("verbose",StringComparison.OrdinalIgnoreCase); else if(gk=="maxlogkb"&&int.TryParse(gv,out n)) MaxLogBytes=Math.Max(32,n)*1024L; continue; }
       if(cur==null) continue;
       int i=line.IndexOf('='); if(i<1) continue; var k=line.Substring(0,i).Trim().ToLowerInvariant(); var v=Environment.ExpandEnvironmentVariables(line.Substring(i+1).Trim());
       if(k=="enabled") cur.Enabled=ParseBool(v); else if(k=="watchdog") cur.Watchdog=ParseBool(v); else if(k=="interceptctrlq") cur.CtrlQ=ParseBool(v); else if(k=="interceptctrlw") cur.CtrlW=ParseBool(v); else if(k=="order"){} else if(k=="notified") cur.Notified=ParseBool(v); else if(k=="id") cur.Id=v; else if(k=="geometric") cur.Geometric=ParseBool(v);
@@ -120,23 +121,30 @@ partial class TrayHelper : ApplicationContext {
   public void OpenAppSettings(AppTarget a){ ShowApp(a); if(string.IsNullOrEmpty(a.SettingsKeys)) return;
     var t=new System.Windows.Forms.Timer(); t.Interval=900; t.Tick+=(s,e)=>{ t.Stop(); t.Dispose(); try{ if(a.hwnd!=IntPtr.Zero&&GetForegroundWindow()==a.hwnd){ SendKeys.SendWait(a.SettingsKeys); Log(a.Name+": sent settings shortcut"); } else Log(a.Name+": not foreground, settings shortcut skipped"); }catch{} }; t.Start(); }
   // Keep maximized state across hide/show: SW_SHOWMAXIMIZED if it was zoomed, never SW_RESTORE/SHOWNORMAL on it.
-  static void HideWin(AppTarget a,IntPtr h){ if(h==IntPtr.Zero) return; if(IsWindowVisible(h)){ a.wasMax=IsZoomed(h); a.wasMin=IsIconic(h); } ShowWindow(h,0); SaveHidden(); }
-  static void ShowWin(AppTarget a){ var h=a.hwnd; if(h==IntPtr.Zero) return; bool max=a.wasMax||IsZoomed(h); ShowWindow(h,max?3:(a.wasMin||IsIconic(h))?9:5); SaveHidden(); }
+  // Store/UWP windows (ApplicationFrameHost) go to a hidden virtual desktop instead of SW_HIDE: no taskbar ghost, no blank frame.
+  static bool FrameHost(IntPtr h){ try{ uint pid; GetWindowThreadProcessId(h,out pid); using(var p=Process.GetProcessById((int)pid)) return p.ProcessName.Equals("ApplicationFrameHost",StringComparison.OrdinalIgnoreCase); }catch{ return false; } }
+  static void HideWin(AppTarget a,IntPtr h){ if(h==IntPtr.Zero) return; if(IsWindowVisible(h)&&!a.vd){ a.wasMax=IsZoomed(h); a.wasMin=IsIconic(h); }
+    if(UwpVd&&!a.vd&&FrameHost(h)&&Vd.Hide(h)){ a.vd=true; Log(a.Name+": moved to the hidden desktop"); } else if(!a.vd) ShowWindow(h,0); SaveHidden(); }
+  static void ShowWin(AppTarget a){ var h=a.hwnd; if(h==IntPtr.Zero) return; if(a.vd){ Vd.Show(h); a.vd=false; Vd.CleanupIfUnused(); }
+    bool max=a.wasMax||IsZoomed(h); ShowWindow(h,max?3:(a.wasMin||IsIconic(h))?9:5); SaveHidden(); }
+  internal static bool AnyVd(){ return Apps.Concat(Temps).Any(x=>x.vd&&x.Running); }
   // ---------- crash safety: every hidden window is written to hidden.txt so nothing is lost if TrayHelper dies ----------
   static string HiddenPath{ get{ return Path.Combine(Dir??"","hidden.txt"); } }
   static readonly object hiddenLock=new object();
   internal static void SaveHidden(){ try{ var sb=new StringBuilder();
-      foreach(var a in Apps.ToArray()){ var h=a.hwnd; if(h==IntPtr.Zero||!IsWindow(h)||IsWindowVisible(h)) continue; uint pid; GetWindowThreadProcessId(h,out pid); sb.AppendLine(h.ToInt64()+"\t"+pid+"\t"+(a.wasMax?1:0)+"\t"+a.ProcName); }
+      foreach(var a in Apps.Concat(Temps).ToArray()){ var h=a.hwnd; if(h==IntPtr.Zero||!IsWindow(h)||(!a.vd&&IsWindowVisible(h))) continue; uint pid; GetWindowThreadProcessId(h,out pid); sb.AppendLine(h.ToInt64()+"\t"+pid+"\t"+(a.wasMax?1:0)+"\t"+a.ProcName+"\t"+(a.Temp?"t":"")+(a.vd?"v":"")); }
       lock(hiddenLock){ if(sb.Length==0){ if(File.Exists(HiddenPath)) File.Delete(HiddenPath); } else File.WriteAllText(HiddenPath,sb.ToString()); } }catch{} }
-  sealed class HiddenRec{ public IntPtr H; public uint Pid; public bool Max; public string Proc; }
+  sealed class HiddenRec{ public IntPtr H; public uint Pid; public bool Max, Temp, Vd; public string Proc; }
   static List<HiddenRec> ReadHidden(){ var r=new List<HiddenRec>(); try{ if(!File.Exists(HiddenPath)) return r; foreach(var ln in File.ReadAllLines(HiddenPath)){ var f=ln.Split('\t'); long hv; uint pid; if(f.Length<4||!long.TryParse(f[0],out hv)||!uint.TryParse(f[1],out pid)) continue;
-        var h=new IntPtr(hv); uint now; if(!IsWindow(h)) continue; GetWindowThreadProcessId(h,out now); if(now!=pid||IsWindowVisible(h)) continue; r.Add(new HiddenRec{ H=h, Pid=pid, Max=f[2]=="1", Proc=f[3] }); } }catch{} return r; }
+        var h=new IntPtr(hv); uint now; if(!IsWindow(h)) continue; GetWindowThreadProcessId(h,out now); string fl=f.Length>4?f[4]:""; bool v=fl.Contains("v"); if(now!=pid||(!v&&IsWindowVisible(h))) continue; r.Add(new HiddenRec{ H=h, Pid=pid, Max=f[2]=="1", Proc=f[3], Temp=fl.Contains("t"), Vd=v }); } }catch{} return r; }
   // Startup: windows of managed apps stay hidden and are re-adopted (no popping windows); anything else is shown again.
-  static void RecoverHidden(){ int adopted=0, shown=0; foreach(var rec in ReadHidden()){ var a=Apps.FirstOrDefault(x=>x.Enabled&&!x.Native&&string.Equals(x.ProcName,rec.Proc,StringComparison.OrdinalIgnoreCase));
-      if(a!=null&&(a.hwnd==IntPtr.Zero||!IsWindow(a.hwnd))){ a.hwnd=rec.H; a.wasMax=rec.Max; a.hiddenAt=DateTime.Now; adopted++; } else { ShowWindow(rec.H,rec.Max?3:5); shown++; } }
+  static void ShowRec(HiddenRec rec){ if(rec.Vd) Vd.Show(rec.H); ShowWindow(rec.H,rec.Max?3:5); }
+  static void RecoverHidden(){ int adopted=0, shown=0; foreach(var rec in ReadHidden()){ var a=rec.Temp?null:Apps.FirstOrDefault(x=>x.Enabled&&!x.Native&&string.Equals(x.ProcName,rec.Proc,StringComparison.OrdinalIgnoreCase));
+      if(a!=null&&(a.hwnd==IntPtr.Zero||!IsWindow(a.hwnd))){ a.hwnd=rec.H; a.wasMax=rec.Max; a.vd=rec.Vd; a.hiddenAt=DateTime.Now; adopted++; } else { ShowRec(rec); shown++; } }
+    if(!AnyVd()) Vd.CleanupIfUnused();
     if(adopted+shown>0) Log("recovered hidden windows from last run: adopted="+adopted+" shown="+shown); SaveHidden(); }
   // Quit / fatal error: show everything we hid.
-  static void RestoreAllHidden(){ foreach(var a in Apps.ToArray()){ try{ if(a.Hidden) ShowWin(a); }catch{} } foreach(var rec in ReadHidden()){ try{ ShowWindow(rec.H,rec.Max?3:5); }catch{} } try{ lock(hiddenLock){ if(File.Exists(HiddenPath)) File.Delete(HiddenPath); } }catch{} }
+  static void RestoreAllHidden(){ foreach(var a in Apps.Concat(Temps).ToArray()){ try{ if(a.Hidden) ShowWin(a); }catch{} } foreach(var rec in ReadHidden()){ try{ ShowRec(rec); }catch{} } try{ Vd.CleanupIfUnused(); }catch{} try{ lock(hiddenLock){ if(File.Exists(HiddenPath)) File.Delete(HiddenPath); } }catch{} }
   public void Hide_(AppTarget a){ if(a.Running&&!a.Hidden){ HideWin(a,a.hwnd); a.snap=null; a.hiddenAt=DateTime.Now; } }
   public void Exit_(){ ExitHelper(); }
   public void AddApp(AppTarget a){ Apps.Add(a); snapApps=Apps.ToArray(); SaveAll(); Log("added "+a.Name); }
@@ -145,7 +153,7 @@ partial class TrayHelper : ApplicationContext {
   internal static void SaveAll(){ try{ var sb=new StringBuilder();
     sb.AppendLine("; TrayHelper config. One [App:Name] section per app. Edited by the settings window.");
     sb.AppendLine("; ExePath may be a normal exe or shell:AppsFolder\\<AUMID> for Store/MSIX apps.");
-    sb.AppendLine(); sb.AppendLine("[General]"); sb.AppendLine("Exclude="+string.Join(",",Exclude)); sb.AppendLine("Notifications="+(NotifyFirstHide?"true":"false")); sb.AppendLine("HotkeyRestoreAll="+HkRestoreAll); sb.AppendLine("SettingsOpen="+(OpenMaximized?"maximized":"last")); if(WinW>0&&!double.IsNaN(WinL)) sb.AppendLine("SettingsBounds="+(int)WinL+","+(int)WinT+","+(int)WinW+","+(int)WinH+","+(WinMax?"max":"normal"));
+    sb.AppendLine(); sb.AppendLine("[General]"); sb.AppendLine("Exclude="+string.Join(",",Exclude)); sb.AppendLine("Notifications="+(NotifyFirstHide?"true":"false")); sb.AppendLine("HotkeyRestoreAll="+HkRestoreAll); sb.AppendLine("HotkeySendToTray="+HkSendToTray); sb.AppendLine("UwpVirtualDesktop="+(UwpVd?"true":"false")); sb.AppendLine("SettingsOpen="+(OpenMaximized?"maximized":"last")); if(WinW>0&&!double.IsNaN(WinL)) sb.AppendLine("SettingsBounds="+(int)WinL+","+(int)WinT+","+(int)WinW+","+(int)WinH+","+(WinMax?"max":"normal"));
     foreach(var a in Apps){ sb.AppendLine(); sb.AppendLine("[App:"+a.Name+"]"); if(a.Id!=null) sb.AppendLine("Id="+a.Id); if(a.CtrlQ) sb.AppendLine("InterceptCtrlQ=true"); if(a.CtrlW) sb.AppendLine("InterceptCtrlW=true"); if(a.Notified) sb.AppendLine("Notified=true"); if(a.Geometric) sb.AppendLine("Geometric=true"); sb.AppendLine("Enabled="+(a.Enabled?"true":"false"));
       sb.AppendLine("ExePath="+(a.ExePath??"")); sb.AppendLine("ProcessName="+a.ProcName); sb.AppendLine("WindowClass="+a.WinClass); sb.AppendLine("WindowTitle="+a.WinTitle); }
     File.WriteAllText(IniPath,sb.ToString()); }catch(Exception ex){ Log("save ini "+ex.Message); } }
@@ -194,7 +202,7 @@ partial class TrayHelper : ApplicationContext {
     try{
       if(!booted){ booted=true; try{ ui=new UiWin(this); ui.Open(); uiHwnd=ui.Handle; ApplyHotkeys(); }catch(Exception ex){ Log("ui "+ex.Message); } sync=SynchronizationContext.Current; try{ weHook=SetWinEventHook(0x800B,0x800B,IntPtr.Zero,weProc,0,0,0); fgHook=SetWinEventHook(0x0003,0x0003,IntPtr.Zero,weProc,0,0,0); }catch{} Log("started dpi="+dpiMode+" apps="+Apps.Count+" hooks: mouse="+(mHook!=IntPtr.Zero)+" key="+(kHook!=IntPtr.Zero));  }
       EnsureHooks();
-      foreach(var a in Apps) TickApp(a);
+      foreach(var a in Apps) TickApp(a); TickTemps();
       snapApps=Apps.ToArray();
       if(sw.ElapsedMilliseconds>250) hooksSuspect=true;
       if(hooksSuspect||hookFault) EnsureHooks();
@@ -203,7 +211,7 @@ partial class TrayHelper : ApplicationContext {
     finally{ inTick=false; } }
   void TickApp(AppTarget a){
     if(a.hwnd==IntPtr.Zero||!IsWindow(a.hwnd)){ var h=FindMain(a); if(h!=a.hwnd){ a.hwnd=h; if(h==IntPtr.Zero) a.snap=null; else HoldProc(a); Log(a.Name+": attached hwnd="+h); } }
-    bool running=a.hwnd!=IntPtr.Zero;
+    bool running=a.hwnd!=IntPtr.Zero; if(running&&a.vd&&Vd.OnCurrent(a.hwnd)) a.vd=false; // brought back by hand (Task View)
     if(running){ a.seenRunning=true; a.goneSince=DateTime.MaxValue; if(a.userQuit&&a.quitSawGone&&IsWindowVisible(a.hwnd)){ a.userQuit=false; a.quitSawGone=false; } }
     else{ if(a.goneSince==DateTime.MaxValue&&a.seenRunning){ a.goneSince=DateTime.Now; CheckCleanExit(a); } if(a.userQuit) a.quitSawGone=true; }
     if(running&&a.hideNew&&IsWindowVisible(a.hwnd)){ HideWin(a,a.hwnd); a.hideNew=false; a.hiddenAt=DateTime.Now; a.snap=null; Log(a.Name+": hid relaunched window"); }
@@ -298,7 +306,7 @@ partial class TrayHelper : ApplicationContext {
     if(kind==1){ var s=a.snap; if(s==null||!(x>=s.l&&x<s.r&&y>=s.t&&y<s.b)){ Log(a.Name+": skip, rect moved; click passed through"); a.snap=null; ReplayClick(x,y); return; }
       var p=new POINT(); p.x=x; p.y=y; var under=WindowFromPoint(p); var root=under==IntPtr.Zero?IntPtr.Zero:GetAncestor(under,2);
       if(root!=h){ Log(a.Name+": skip, under="+under+" root="+root+" at "+x+","+y+"; click passed through"); a.snap=null; ReplayClick(x,y); return; } }
-    HideWin(a,h); if(IsWindowVisible(h)){ a.snap=null; LetClose(a,h,"window still visible"); return; } a.snap=null; a.hiddenAt=DateTime.Now; FirstHideNote(a); Log(a.Name+": hid ("+(kind==1?"X":"alt+f4")+")"); }
+    HideWin(a,h); if(!a.vd&&IsWindowVisible(h)){ a.snap=null; LetClose(a,h,"window still visible"); return; } a.snap=null; a.hiddenAt=DateTime.Now; FirstHideNote(a); Log(a.Name+": hid ("+(kind==1?"X":"alt+f4")+")"); }
 
   static void HoldProc(AppTarget a){ try{ if(a.mainProc!=null){ a.mainProc.Dispose(); a.mainProc=null; } uint pid; GetWindowThreadProcessId(a.hwnd,out pid); var p=Process.GetProcessById((int)pid); var hh=p.Handle; a.mainProc=p; }catch{ a.mainProc=null; } }
   // App quit itself cleanly (its own Quit menu) -> exit code 0 -> treat like a user quit, no relaunch.
@@ -313,10 +321,25 @@ partial class TrayHelper : ApplicationContext {
       else{ Keys k; if(!Enum.TryParse(p,true,out k)) return false; vk=(uint)k; } } return vk!=0&&mods!=0; }
   internal bool hotkeysOff; public readonly Dictionary<int,bool> HotkeyOk=new Dictionary<int,bool>();
   bool Reg(int id,string spec){ UnregisterHotKey(uiHwnd,id); uint m,v; if(hotkeysOff||!ParseHk(spec,out m,out v)){ HotkeyOk[id]=true; return true; } bool ok=RegisterHotKey(uiHwnd,id,m|0x4000,v); HotkeyOk[id]=ok; if(!ok) Log("hotkey "+spec+" is taken by another app"); return ok; }
-  public void ApplyHotkeys(){ if(uiHwnd==IntPtr.Zero) return; Reg(1,HkRestoreAll); }
+  public void ApplyHotkeys(){ if(uiHwnd==IntPtr.Zero) return; Reg(1,HkRestoreAll); Reg(2,HkSendToTray); }
   public void SuspendHotkeys(bool off){ hotkeysOff=off; ApplyHotkeys(); }
-  public void OnHotkey(int id){ if(id==1) RestoreAll(); }
-  public void RestoreAll(){ int n=0; foreach(var a in Apps.ToArray()){ if(a.Hidden){ ShowWin(a); n++; } } Log("restore all: "+n+" window(s)"); }
+  public void OnHotkey(int id){ if(id==1) RestoreAll(); else if(id==2) SendForegroundToTray(); }
+  public void RestoreAll(){ int n=0; foreach(var a in Apps.Concat(Temps).ToArray()){ if(a.Hidden){ ShowWin(a); n++; } } Log("restore all: "+n+" window(s)"); }
+  // ---------- send any window to the tray (temporary, not saved; its icon goes away once it's shown again) ----------
+  [DllImport("kernel32")] static extern IntPtr OpenProcess(uint a,bool i,uint pid);
+  [DllImport("kernel32")] static extern bool CloseHandle(IntPtr h);
+  [DllImport("kernel32",CharSet=CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr h,int f,StringBuilder s,ref int n);
+  static string ExeOf(uint pid){ var ph=OpenProcess(0x1000,false,pid); if(ph==IntPtr.Zero) return null; try{ var sb=new StringBuilder(1024); int n=sb.Capacity; return QueryFullProcessImageName(ph,0,sb,ref n)?sb.ToString():null; }finally{ CloseHandle(ph); } }
+  public void SendForegroundToTray(){ var fg=GetForegroundWindow(); if(fg==IntPtr.Zero) return; var h=GetAncestor(fg,2); if(h==IntPtr.Zero) h=fg;
+    if(!IsWindowVisible(h)) return; uint pid; GetWindowThreadProcessId(h,out pid); if(pid==MyPid) return;
+    var c=new StringBuilder(256); GetClassName(h,c,256); var cls=c.ToString(); if(cls=="Shell_TrayWnd"||cls=="Shell_SecondaryTrayWnd"||cls=="Progman"||cls=="WorkerW"||cls=="Windows.UI.Core.CoreWindow") return;
+    var m=Apps.FirstOrDefault(x=>x.hwnd==h&&x.Running); if(m!=null){ Hide_(m); Log(m.Name+": hid (shortcut)"); return; }
+    if(Temps.Any(x=>x.hwnd==h)) return;
+    var t=new StringBuilder(256); GetWindowText(h,t,256); string pn=null; try{ using(var p=Process.GetProcessById((int)pid)) pn=p.ProcessName; }catch{} var exe=ExeOf(pid);
+    var a=new AppTarget(); a.Temp=true; a.hwnd=h; a.ProcName=pn??""; a.IconExe=exe; a.Enabled=true; a.Preset=false; a.Detected=true; a.seenRunning=true; a.Name=t.Length>0?t.ToString():(pn??"Window");
+    Temps.Add(a); HideWin(a,h); if(!a.vd&&IsWindowVisible(h)){ Temps.Remove(a); Log(a.Name+": could not hide (shortcut)"); return; } a.hiddenAt=DateTime.Now; SyncAppTray(a,true); Log(a.Name+": sent to tray (shortcut)"); }
+  void TickTemps(){ foreach(var a in Temps.ToArray()){ bool alive=a.hwnd!=IntPtr.Zero&&IsWindow(a.hwnd); if(alive&&a.vd&&Vd.OnCurrent(a.hwnd)) a.vd=false;
+      if(!alive||!a.Hidden){ Temps.Remove(a); if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } SaveHidden(); } } }
   // ---------- tray icons: exe icon, solid background made transparent, sized for the current DPI ----------
   [DllImport("user32")] static extern bool DestroyIcon(IntPtr h);
   static Icon CleanIcon(Icon src){ if(src==null) return null; try{ var sz=SystemInformation.SmallIconSize; using(var big=src.ToBitmap()){
@@ -352,11 +375,11 @@ partial class TrayHelper : ApplicationContext {
     mHook=SetWindowsHookEx(14,mProc,mod,0); kHook=SetWindowsHookEx(13,kProc,mod,0);
     if(mHook==IntPtr.Zero||kHook==IntPtr.Zero) Log("hook install failed"); }
   void UnhookOnly(){ if(mHook!=IntPtr.Zero){ UnhookWindowsHookEx(mHook); mHook=IntPtr.Zero; } if(kHook!=IntPtr.Zero){ UnhookWindowsHookEx(kHook); kHook=IntPtr.Zero; } }
-  void Cleanup(){ if(Interlocked.Exchange(ref cleaned,1)==1) return; exiting=true; foreach(var a in Apps){ try{ if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } }catch{} }
+  void Cleanup(){ if(Interlocked.Exchange(ref cleaned,1)==1) return; exiting=true; foreach(var a in Apps.Concat(Temps)){ try{ if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } }catch{} }
     try{ if(timer!=null){ timer.Stop(); timer.Dispose(); timer=null; } }catch{} try{ UnhookOnly(); }catch{} try{ if(weHook!=IntPtr.Zero) UnhookWinEvent(weHook); if(fgHook!=IntPtr.Zero) UnhookWinEvent(fgHook); }catch{}
     try{ if(ui!=null){ ui.DestroyHandle(); ui=null; } }catch{} try{ CloseWpf(); }catch{}
     try{ if(tray!=null){ tray.Visible=false; tray.Icon=null; tray.Dispose(); tray=null; } if(ownedIcon!=null) ownedIcon.Dispose(); }catch{} }
-  void ExitHelper(){ RestoreAllHidden(); foreach(var a in Apps){ if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } } Log("helper exit");
+  void ExitHelper(){ RestoreAllHidden(); foreach(var a in Apps.Concat(Temps)){ if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } } Log("helper exit");
     var later=sync??SynchronizationContext.Current; if(later!=null) later.Post(delegate{ Cleanup(); ExitThread(); },null); else{ Cleanup(); ExitThread(); } }
 
   [STAThread] static void Main(){
@@ -374,3 +397,26 @@ partial class TrayHelper : ApplicationContext {
       Application.Run(new TrayHelper()); }finally{ mx.Dispose(); } }
 }
 
+// Wrapper over Ciantic's VirtualDesktopAccessor.dll (MIT, shipped next to the exe). Any failure turns the feature off for this run.
+static class Vd{
+  const string D="VirtualDesktopAccessor.dll"; const string Name="TrayHelper";
+  [DllImport(D)] static extern int GetDesktopCount();
+  [DllImport(D)] static extern int GetCurrentDesktopNumber();
+  [DllImport(D)] static extern int GetWindowDesktopNumber(IntPtr h);
+  [DllImport(D)] static extern int IsWindowOnCurrentVirtualDesktop(IntPtr h);
+  [DllImport(D)] static extern int MoveWindowToDesktopNumber(IntPtr h,int n);
+  [DllImport(D)] static extern int CreateDesktop();
+  [DllImport(D)] static extern int RemoveDesktop(int n,int fallback);
+  [DllImport(D)] static extern int SetDesktopName(int n,byte[] utf8);
+  [DllImport(D)] static extern int GetDesktopName(int n,byte[] buf,UIntPtr len);
+  static int state; // 0 unknown, 1 ok, -1 off
+  public static bool Ok{ get{ if(state==0){ try{ state=File.Exists(Path.Combine(TrayHelper.Dir??"",D))&&GetDesktopCount()>0?1:-1; }catch(Exception ex){ state=-1; TrayHelper.Log("virtual desktop off: "+ex.Message); } } return state==1; } }
+  static void Fail(Exception ex){ state=-1; TrayHelper.Log("virtual desktop off: "+ex.Message); }
+  static int Find(){ int n=GetDesktopCount(); var buf=new byte[256]; for(int i=0;i<n;i++){ Array.Clear(buf,0,buf.Length); if(GetDesktopName(i,buf,new UIntPtr((uint)buf.Length))<0) continue; int z=Array.IndexOf(buf,(byte)0); if(z<0) z=buf.Length; if(Encoding.UTF8.GetString(buf,0,z)==Name) return i; } return -1; }
+  public static bool Hide(IntPtr h){ if(!Ok) return false; try{ int d=Find(); if(d<0){ d=CreateDesktop(); if(d<0) return false; SetDesktopName(d,Encoding.UTF8.GetBytes(Name+"\0")); }
+      if(d==GetCurrentDesktopNumber()) return false; return MoveWindowToDesktopNumber(h,d)>=0&&GetWindowDesktopNumber(h)==d; }catch(Exception ex){ Fail(ex); return false; } }
+  public static void Show(IntPtr h){ if(!Ok) return; try{ MoveWindowToDesktopNumber(h,GetCurrentDesktopNumber()); }catch(Exception ex){ Fail(ex); } }
+  public static bool OnCurrent(IntPtr h){ if(!Ok) return true; try{ return IsWindowOnCurrentVirtualDesktop(h)==1; }catch(Exception ex){ Fail(ex); return true; } }
+  // Remove our hidden desktop once nothing of ours is on it (anything else left there moves to the current desktop).
+  public static void CleanupIfUnused(){ if(state!=1||TrayHelper.AnyVd()) return; try{ int d=Find(); if(d>=0){ int cur=GetCurrentDesktopNumber(); if(d!=cur) RemoveDesktop(d,cur); } }catch(Exception ex){ Fail(ex); } }
+}

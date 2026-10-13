@@ -11,4 +11,5 @@ $refs = @('System.Windows.Forms.dll','System.Drawing.dll','System.Core.dll',"$fw
 $ico = Join-Path $here 'assets\app.ico'; $png = Join-Path $here 'assets\logo.png'
 & "$fw\csc.exe" /nologo /codepage:65001 /target:winexe /optimize+ "/out:$out" "/win32icon:$ico" "/resource:$ico,app.ico" "/resource:$png,logo.png" "/resource:$(Join-Path $here 'CHANGELOG.md'),CHANGELOG.md" $refs (Join-Path $here 'TrayHelper.cs') (Join-Path $here 'Catalog.cs') (Join-Path $here 'Ui.cs') (Join-Path $here 'Scanner.cs')
 if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE)" }
+$vda = Join-Path $here 'assets\VirtualDesktopAccessor.dll'; if (Test-Path $vda) { Copy-Item $vda (Join-Path $here 'dist') -Force -ErrorAction SilentlyContinue }
 Write-Host "Built $out"

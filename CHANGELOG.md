@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0
+- Send any window to the tray with a shortcut (default Ctrl+Alt+Down); its tray icon disappears once you bring it back
+- Store / UWP apps are hidden on a separate hidden desktop: no taskbar ghost (Settings → Advanced, on by default)
+- The hidden desktop is removed automatically when nothing is on it
+
 ## 0.6.1
 - Shortcut to show all hidden apps (default Ctrl+Alt+Up), set it with a click-and-press recorder in Settings
 - Status dot on each app icon: green = open, grey = hidden in the tray

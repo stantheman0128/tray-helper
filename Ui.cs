@@ -202,8 +202,8 @@ partial class TrayHelper{
       var b=Theme.MkBtn(sp,"Link"); b.HorizontalAlignment=HorizontalAlignment.Stretch; b.HorizontalContentAlignment=HorizontalAlignment.Left; b.Click+=(s,e)=>{ w.Close(); act(); }; st.Children.Add(b); };
     item(a.Hidden?"\uE8A7":"\uE738",a.Hidden?"Show":"Hide to tray",()=>{ if(a.Hidden) ShowApp(a); else Hide_(a); });
     item("\uE711","Quit "+a.Name,()=>QuitApp(a));
-    var sep=new Border(); sep.Height=1; sep.Background=Theme.Line; sep.Margin=new Thickness(6,4,6,4); st.Children.Add(sep);
-    item("\uE7E8","Disable close-to-tray",()=>{ if(a.Hidden) ShowApp(a); SetEnabled(a,false); });
+    if(!a.Temp){ var sep=new Border(); sep.Height=1; sep.Background=Theme.Line; sep.Margin=new Thickness(6,4,6,4); st.Children.Add(sep);
+    item("\uE7E8","Disable close-to-tray",()=>{ if(a.Hidden) ShowApp(a); SetEnabled(a,false); }); }
     item("\uE713","TrayHelper settings",()=>ShowSettings());
     w.Content=outer; w.Deactivated+=(s,e)=>{ try{ w.Close(); }catch{} };
     var cur=System.Windows.Forms.Cursor.Position; w.Show();
@@ -293,6 +293,7 @@ sealed class SettingsWindow:Window{
     st.Children.Add(Row("Start with Windows",null,Labeled("",TrayHelper.StartWithWindows,v=>TrayHelper.StartWithWindows=v)));
     st.Children.Add(Row("Notifications",null,Labeled("",TrayHelper.NotifyFirstHide,v=>{ TrayHelper.NotifyFirstHide=v; TrayHelper.SaveAll(); })));
     st.Children.Add(Row("Show all hidden apps",null,Theme.HotkeyBox(TrayHelper.HkRestoreAll,v=>{ TrayHelper.HkRestoreAll=v; TrayHelper.SaveAll(); th.ApplyHotkeys(); bool ok; return !th.HotkeyOk.TryGetValue(1,out ok)||ok; },r=>th.SuspendHotkeys(r))));
+    st.Children.Add(Row("Send window to tray",null,Theme.HotkeyBox(TrayHelper.HkSendToTray,v=>{ TrayHelper.HkSendToTray=v; TrayHelper.SaveAll(); th.ApplyHotkeys(); bool ok; return !th.HotkeyOk.TryGetValue(2,out ok)||ok; },r=>th.SuspendHotkeys(r))));
     var io=new StackPanel(); io.Orientation=Orientation.Horizontal;
     var ex=Theme.MkBtn("Export…","Btn"); ex.Click+=(s,e)=>{ var d=new SaveFileDialog(); d.FileName="tray-helper.ini"; d.Filter="TrayHelper config|*.ini"; if(d.ShowDialog(this)==true){ try{ TrayHelper.SaveAll(); File.Copy(TrayHelper.IniPath,d.FileName,true); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } } };
     var im=Theme.MkBtn("Import…","Btn"); im.Margin=new Thickness(8,0,0,0); im.Click+=(s,e)=>{ var d=new OpenFileDialog(); d.Filter="TrayHelper config|*.ini"; if(d.ShowDialog(this)==true){ try{ File.Copy(d.FileName,TrayHelper.IniPath,true); th.ReloadConfig(); Rebuild(); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } } };
@@ -306,6 +307,7 @@ sealed class SettingsWindow:Window{
     st.Children.Add(Row("Reset to defaults",null,rs));
     var ah=Theme.T("Advanced",15,Theme.Text,FontWeights.SemiBold); ah.Margin=new Thickness(2,18,0,6); st.Children.Add(ah);
     st.Children.Add(Row("Open this window maximized","Off: restore last size and position",Labeled("",TrayHelper.OpenMaximized,v=>{ TrayHelper.OpenMaximized=v; TrayHelper.SaveAll(); })));
+    st.Children.Add(Row("Hide Store apps on a hidden desktop",null,Labeled("",TrayHelper.UwpVd,v=>{ TrayHelper.UwpVd=v; TrayHelper.SaveAll(); })));
     return st; }
   static Border Row(string title,string sub,UIElement right){ var g=new Grid(); g.ColumnDefinitions.Add(new ColumnDefinition()); g.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
     var tx=new StackPanel(); tx.Children.Add(Theme.T(title,14,Theme.Text,FontWeights.Normal)); if(sub!=null){ var s=Theme.T(sub,12,Theme.Sub,FontWeights.Normal); tx.Children.Add(s); } tx.VerticalAlignment=VerticalAlignment.Center; g.Children.Add(tx); Grid.SetColumn(right,1); g.Children.Add(right); return Card(g); }
