@@ -41,7 +41,7 @@ static class Scanner{
   public static HashSet<string> TrayOwners(){ var set=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     try{ using(var k=Registry.CurrentUser.OpenSubKey(@"Control Panel\NotifyIconSettings")){ if(k!=null) foreach(var n in k.GetSubKeyNames()){ using(var s=k.OpenSubKey(n)){ var p=s==null?null:s.GetValue("ExecutablePath") as string; if(string.IsNullOrEmpty(p)) continue;
             var f=Path.GetFileNameWithoutExtension(p.Replace('/','\\')); if(!string.IsNullOrEmpty(f)) set.Add(f); } } } }catch{}
-    set.Remove("TrayHelper"); return set; }
+    set.Remove("TrayHelper"); foreach(var q in Catalog.TrayButQuits) set.Remove(q); foreach(var pr in Catalog.All) if(!pr.Native&&pr.ProcName!=null) set.Remove(pr.ProcName); return set; }
   static bool Elevated(uint pid){ var ph=OpenProcess(0x1000,false,pid); if(ph==IntPtr.Zero) return false;
     try{ IntPtr t; if(!OpenProcessToken(ph,0x0008,out t)) return true; try{ int v,r; if(GetTokenInformation(t,20,out v,4,out r)) return v!=0; }finally{ CloseHandle(t); } }finally{ CloseHandle(ph); } return false; }
   public sealed class Cand{ public AppTarget App; public bool Suggest; }

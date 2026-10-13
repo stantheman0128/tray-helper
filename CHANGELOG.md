@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+- Hidden windows survive a TrayHelper crash: they're re-adopted on the next start, and Exit always brings everything back
+- If an app can't be hidden, X / Alt+F4 now close it normally instead of doing nothing
+- Smarter main-window matching (process + class + title, ignores splash and helper windows)
+- Fix: LINE main window not found; Cursor wrongly treated as having its own tray
+
 ## 0.5.2
 - Fix: apps restored from the tray came back un-maximized (maximized state is kept across hide/show)
 

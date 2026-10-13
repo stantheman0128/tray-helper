@@ -18,6 +18,7 @@ sealed class AppTarget{ public bool wasMax, wasMin; public bool geoLogged;
 }
 
 partial class TrayHelper : ApplicationContext {
+  internal const string Version="0.6.0";
   internal static bool OpenMaximized=true; internal static double WinW=0,WinH=0,WinL=double.NaN,WinT=double.NaN; internal static bool WinMax=true; internal static long MaxLogBytes=256*1024; internal static int StartDelay=0; internal static List<string> Exclude=new List<string>{"Raycast","chrome","msedge","firefox","explorer","TrayHelper","Grok Bot","ShellExperienceHost","SearchHost","StartMenuExperienceHost","TextInputHost","LockApp"}; internal static bool NotifyFirstHide=true, LogVerbose=false; const int WM_HIDE=0x8001;
   const int SM_CXSIZE=30, SM_CYSIZE=31, SM_CXFRAME=32, SM_CYFRAME=33, SM_CXPADDEDBORDER=92;
   internal static string Dir, IniPath, dpiMode="unaware"; static int MyPid;
@@ -118,8 +119,23 @@ partial class TrayHelper : ApplicationContext {
   public void OpenAppSettings(AppTarget a){ ShowApp(a); if(string.IsNullOrEmpty(a.SettingsKeys)) return;
     var t=new System.Windows.Forms.Timer(); t.Interval=900; t.Tick+=(s,e)=>{ t.Stop(); t.Dispose(); try{ if(a.hwnd!=IntPtr.Zero&&GetForegroundWindow()==a.hwnd){ SendKeys.SendWait(a.SettingsKeys); Log(a.Name+": sent settings shortcut"); } else Log(a.Name+": not foreground, settings shortcut skipped"); }catch{} }; t.Start(); }
   // Keep maximized state across hide/show: SW_SHOWMAXIMIZED if it was zoomed, never SW_RESTORE/SHOWNORMAL on it.
-  static void HideWin(AppTarget a,IntPtr h){ if(h==IntPtr.Zero) return; if(IsWindowVisible(h)){ a.wasMax=IsZoomed(h); a.wasMin=IsIconic(h); } ShowWindow(h,0); }
-  static void ShowWin(AppTarget a){ var h=a.hwnd; if(h==IntPtr.Zero) return; bool max=a.wasMax||IsZoomed(h); ShowWindow(h,max?3:(a.wasMin||IsIconic(h))?9:5); }
+  static void HideWin(AppTarget a,IntPtr h){ if(h==IntPtr.Zero) return; if(IsWindowVisible(h)){ a.wasMax=IsZoomed(h); a.wasMin=IsIconic(h); } ShowWindow(h,0); SaveHidden(); }
+  static void ShowWin(AppTarget a){ var h=a.hwnd; if(h==IntPtr.Zero) return; bool max=a.wasMax||IsZoomed(h); ShowWindow(h,max?3:(a.wasMin||IsIconic(h))?9:5); SaveHidden(); }
+  // ---------- crash safety: every hidden window is written to hidden.txt so nothing is lost if TrayHelper dies ----------
+  static string HiddenPath{ get{ return Path.Combine(Dir??"","hidden.txt"); } }
+  static readonly object hiddenLock=new object();
+  internal static void SaveHidden(){ try{ var sb=new StringBuilder();
+      foreach(var a in Apps.ToArray()){ var h=a.hwnd; if(h==IntPtr.Zero||!IsWindow(h)||IsWindowVisible(h)) continue; uint pid; GetWindowThreadProcessId(h,out pid); sb.AppendLine(h.ToInt64()+"\t"+pid+"\t"+(a.wasMax?1:0)+"\t"+a.ProcName); }
+      lock(hiddenLock){ if(sb.Length==0){ if(File.Exists(HiddenPath)) File.Delete(HiddenPath); } else File.WriteAllText(HiddenPath,sb.ToString()); } }catch{} }
+  sealed class HiddenRec{ public IntPtr H; public uint Pid; public bool Max; public string Proc; }
+  static List<HiddenRec> ReadHidden(){ var r=new List<HiddenRec>(); try{ if(!File.Exists(HiddenPath)) return r; foreach(var ln in File.ReadAllLines(HiddenPath)){ var f=ln.Split('\t'); long hv; uint pid; if(f.Length<4||!long.TryParse(f[0],out hv)||!uint.TryParse(f[1],out pid)) continue;
+        var h=new IntPtr(hv); uint now; if(!IsWindow(h)) continue; GetWindowThreadProcessId(h,out now); if(now!=pid||IsWindowVisible(h)) continue; r.Add(new HiddenRec{ H=h, Pid=pid, Max=f[2]=="1", Proc=f[3] }); } }catch{} return r; }
+  // Startup: windows of managed apps stay hidden and are re-adopted (no popping windows); anything else is shown again.
+  static void RecoverHidden(){ int adopted=0, shown=0; foreach(var rec in ReadHidden()){ var a=Apps.FirstOrDefault(x=>x.Enabled&&!x.Native&&string.Equals(x.ProcName,rec.Proc,StringComparison.OrdinalIgnoreCase));
+      if(a!=null&&(a.hwnd==IntPtr.Zero||!IsWindow(a.hwnd))){ a.hwnd=rec.H; a.wasMax=rec.Max; a.hiddenAt=DateTime.Now; adopted++; } else { ShowWindow(rec.H,rec.Max?3:5); shown++; } }
+    if(adopted+shown>0) Log("recovered hidden windows from last run: adopted="+adopted+" shown="+shown); SaveHidden(); }
+  // Quit / fatal error: show everything we hid.
+  static void RestoreAllHidden(){ foreach(var a in Apps.ToArray()){ try{ if(a.Hidden) ShowWin(a); }catch{} } foreach(var rec in ReadHidden()){ try{ ShowWindow(rec.H,rec.Max?3:5); }catch{} } try{ lock(hiddenLock){ if(File.Exists(HiddenPath)) File.Delete(HiddenPath); } }catch{} }
   public void Hide_(AppTarget a){ if(a.Running&&!a.Hidden){ HideWin(a,a.hwnd); a.snap=null; a.hiddenAt=DateTime.Now; } }
   public void Exit_(){ ExitHelper(); }
   public void AddApp(AppTarget a){ Apps.Add(a); snapApps=Apps.ToArray(); SaveAll(); Log("added "+a.Name); }
@@ -133,16 +149,31 @@ partial class TrayHelper : ApplicationContext {
       sb.AppendLine("ExePath="+(a.ExePath??"")); sb.AppendLine("ProcessName="+a.ProcName); sb.AppendLine("WindowClass="+a.WinClass); sb.AppendLine("WindowTitle="+a.WinTitle); }
     File.WriteAllText(IniPath,sb.ToString()); }catch(Exception ex){ Log("save ini "+ex.Message); } }
   // ---------- window tracking ----------
-  static bool PidIs(uint pid,string name){ try{ using(var p=Process.GetProcessById((int)pid)) return string.Equals(p.ProcessName,name,StringComparison.OrdinalIgnoreCase); }catch{ return false; } }
-  public static bool TitleOk(AppTarget a,string t){ if(string.IsNullOrEmpty(a.WinTitle)) return t.Length>0; if(a.WinTitle[0]=='*') return t.IndexOf(a.WinTitle.Substring(1),StringComparison.OrdinalIgnoreCase)>=0; return t==a.WinTitle; }
-  static bool ClassOk(AppTarget a,string c){ return string.IsNullOrEmpty(a.WinClass)||c==a.WinClass; }
-  static IntPtr FindMain(AppTarget a){ IntPtr found=IntPtr.Zero, hiddenMatch=IntPtr.Zero; EnumWindows((h,l)=>{
-      var c=new StringBuilder(256); GetClassName(h,c,256); if(!ClassOk(a,c.ToString())) return true;
+    // Patterns: "a|b" = any of; "*x" = contains x; "x*" = starts with x; else exact. Empty = anything.
+  static bool PatOk(string pat,string v,bool emptyNeedsText){ if(string.IsNullOrEmpty(pat)) return !emptyNeedsText||v.Length>0;
+    foreach(var p0 in pat.Split('|')){ var p=p0.Trim(); if(p.Length==0) continue;
+      if(p.Length>1&&p[0]=='*'){ if(v.IndexOf(p.Substring(1).TrimEnd('*'),StringComparison.OrdinalIgnoreCase)>=0) return true; }
+      else if(p.Length>1&&p[p.Length-1]=='*'){ if(v.StartsWith(p.Substring(0,p.Length-1),StringComparison.OrdinalIgnoreCase)) return true; }
+      else if(string.Equals(v,p,StringComparison.Ordinal)) return true; } return false; }
+  public static bool TitleOk(AppTarget a,string t){ return PatOk(a.WinTitle,t,true); }
+  static bool ClassOk(AppTarget a,string c){ return PatOk(a.WinClass,c,false); }
+  static bool ProcOk(uint pid,string names){ try{ using(var p=Process.GetProcessById((int)pid)){ foreach(var n in (names??"").Split('|')) if(string.Equals(p.ProcessName,n.Trim(),StringComparison.OrdinalIgnoreCase)) return true; } }catch{} return false; }
+  [DllImport("user32",EntryPoint="GetWindowLongW")] static extern int GetWindowLong(IntPtr h,int i);
+  // Main window = best-scoring top-level window of the app's process: process + class + title must match, then
+  // prefer visible, captioned, non-tool, large windows. Splash/tooltip/helper windows of the same process lose.
+  static IntPtr FindMain(AppTarget a){ IntPtr best=IntPtr.Zero; long bestScore=long.MinValue; var pidOk=new Dictionary<uint,bool>();
+    EnumWindows((h,l)=>{
       if(GetWindow(h,4)!=IntPtr.Zero) return true;
+      var c=new StringBuilder(256); GetClassName(h,c,256); if(!ClassOk(a,c.ToString())) return true;
       var t=new StringBuilder(256); GetWindowText(h,t,256); if(!TitleOk(a,t.ToString())) return true;
-      uint pid; GetWindowThreadProcessId(h,out pid); if(PidIs(pid,a.ProcName)){ if(IsWindowVisible(h)){ found=h; return false; } if(hiddenMatch==IntPtr.Zero) hiddenMatch=h; } return true; },IntPtr.Zero); return found!=IntPtr.Zero?found:hiddenMatch; }
+      uint pid; GetWindowThreadProcessId(h,out pid); bool ok; if(!pidOk.TryGetValue(pid,out ok)){ ok=ProcOk(pid,a.ProcName); pidOk[pid]=ok; } if(!ok) return true;
+      int st=GetWindowLong(h,-16), ex=GetWindowLong(h,-20); if((ex&0x80)!=0&&(ex&0x40000)==0) return true; // tool window
+      RECT rc; long area=GetWindowRect(h,out rc)?Math.Max(0L,(long)(rc.r-rc.l)*(rc.b-rc.t)):0;
+      bool vis=IsWindowVisible(h); if(vis&&!IsIconic(h)&&area<200L*120) return true; // tiny visible = popup/splash
+      long score=Math.Min(area,4000000L)/1000; if(vis) score+=100000; if(h==a.hwnd) score+=50000; if((st&0x00C00000)==0x00C00000) score+=20000; if((ex&0x40000)!=0) score+=10000; if(t.Length>0) score+=5000;
+      if(score>bestScore){ bestScore=score; best=h; } return true; },IntPtr.Zero); return best; }
   static bool ClassWindowAlive(AppTarget a){ bool f=false; EnumWindows((h,l)=>{ var c=new StringBuilder(256); GetClassName(h,c,256); if(!ClassOk(a,c.ToString())) return true;
-      uint pid; GetWindowThreadProcessId(h,out pid); if(PidIs(pid,a.ProcName)){ f=true; return false; } return true; },IntPtr.Zero); return f; }
+      uint pid; GetWindowThreadProcessId(h,out pid); if(ProcOk(pid,a.ProcName)){ f=true; return false; } return true; },IntPtr.Zero); return f; }
   static bool BlocksRelaunch(AppTarget a){
     if(a.launchedPid>0){ try{ using(var p=Process.GetProcessById(a.launchedPid)) if(!p.HasExited) return true; }catch(ArgumentException){ a.launchedPid=0; }catch{ return true; } }
     if(ClassWindowAlive(a)) return true;
@@ -229,7 +260,16 @@ partial class TrayHelper : ApplicationContext {
     pendApp=a; pendKind=kind; pendX=x; pendY=y;
     if(uiHwnd!=IntPtr.Zero&&PostMessage(uiHwnd,(uint)WM_HIDE,IntPtr.Zero,IntPtr.Zero)) return;
     if(sync!=null) sync.Post(delegate{ OnUiHide(); },null); else hideQueued=0; }
+  const long ReplayTag=0x54484C50; // "THLP": our own re-injected click, never intercepted
+  [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT{ public int dx,dy; public uint data,flags,time; public IntPtr extra; }
+  [StructLayout(LayoutKind.Sequential)] struct INPUT{ public int type; public MOUSEINPUT mi; }
+  [DllImport("user32",SetLastError=true)] static extern uint SendInput(uint n,INPUT[] i,int size);
+  [DllImport("user32")] static extern bool GetCursorPos(out POINT p);
+  // The X click was swallowed but we did not hide: give the click back so the app closes (or whatever was really under it gets it).
+  static void ReplayClick(int x,int y){ try{ POINT c; if(!GetCursorPos(out c)||Math.Abs(c.x-x)>4||Math.Abs(c.y-y)>4) return; var a=new INPUT[2]; a[0].type=0; a[0].mi.flags=0x0002; a[0].mi.extra=new IntPtr(ReplayTag); a[1].type=0; a[1].mi.flags=0x0004; a[1].mi.extra=new IntPtr(ReplayTag); SendInput(2,a,Marshal.SizeOf(typeof(INPUT))); }catch{} }
+  static void LetClose(AppTarget a,IntPtr h,string why){ Log(a.Name+": hide failed ("+why+"), letting the close through"); PostMessage(h,0x112,new IntPtr(0xF060),IntPtr.Zero); }
   IntPtr MouseHook(int n,IntPtr w,IntPtr l){
+    try{ if(n>=0&&l!=IntPtr.Zero&&Marshal.ReadIntPtr(l,IntPtr.Size==8?24:20).ToInt64()==ReplayTag) return CallNextHookEx(mHook,n,w,l); }catch{}
     try{ if(n>=0&&l!=IntPtr.Zero){ int msg=(int)w;
         if(msg==0x201||msg==0x202){ int x=Marshal.ReadInt32(l,0), y=Marshal.ReadInt32(l,4);
           if(msg==0x201){ if(HitApp(x,y)!=null){ swallowUp=true; return (IntPtr)1; } }
@@ -253,11 +293,11 @@ partial class TrayHelper : ApplicationContext {
   public void OnUiHide(){
     var a=pendApp; int kind=pendKind, x=pendX, y=pendY; pendApp=null; pendKind=0; Interlocked.Exchange(ref hideQueued,0);
     if(exiting||a==null||kind==0) return; IntPtr h=a.hwnd;
-    if(h==IntPtr.Zero||!IsWindow(h)||!IsWindowVisible(h)) return;
-    if(kind==1){ var s=a.snap; if(s==null||!(x>=s.l&&x<s.r&&y>=s.t&&y<s.b)){ Log(a.Name+": skip, rect moved"); return; }
+    if(h==IntPtr.Zero||!IsWindow(h)||!IsWindowVisible(h)){ if(kind==1) ReplayClick(x,y); return; }
+    if(kind==1){ var s=a.snap; if(s==null||!(x>=s.l&&x<s.r&&y>=s.t&&y<s.b)){ Log(a.Name+": skip, rect moved; click passed through"); a.snap=null; ReplayClick(x,y); return; }
       var p=new POINT(); p.x=x; p.y=y; var under=WindowFromPoint(p); var root=under==IntPtr.Zero?IntPtr.Zero:GetAncestor(under,2);
-      if(root!=h){ Log(a.Name+": skip, under="+under+" root="+root+" at "+x+","+y); return; } }
-    HideWin(a,h); a.snap=null; a.hiddenAt=DateTime.Now; FirstHideNote(a); Log(a.Name+": hid ("+(kind==1?"X":"alt+f4")+")"); }
+      if(root!=h){ Log(a.Name+": skip, under="+under+" root="+root+" at "+x+","+y+"; click passed through"); a.snap=null; ReplayClick(x,y); return; } }
+    HideWin(a,h); if(IsWindowVisible(h)){ a.snap=null; LetClose(a,h,"window still visible"); return; } a.snap=null; a.hiddenAt=DateTime.Now; FirstHideNote(a); Log(a.Name+": hid ("+(kind==1?"X":"alt+f4")+")"); }
 
   static void HoldProc(AppTarget a){ try{ if(a.mainProc!=null){ a.mainProc.Dispose(); a.mainProc=null; } uint pid; GetWindowThreadProcessId(a.hwnd,out pid); var p=Process.GetProcessById((int)pid); var hh=p.Handle; a.mainProc=p; }catch{ a.mainProc=null; } }
   // App quit itself cleanly (its own Quit menu) -> exit code 0 -> treat like a user quit, no relaunch.
@@ -292,7 +332,7 @@ partial class TrayHelper : ApplicationContext {
     try{ if(timer!=null){ timer.Stop(); timer.Dispose(); timer=null; } }catch{} try{ UnhookOnly(); }catch{} try{ if(weHook!=IntPtr.Zero) UnhookWinEvent(weHook); if(fgHook!=IntPtr.Zero) UnhookWinEvent(fgHook); }catch{}
     try{ if(ui!=null){ ui.DestroyHandle(); ui=null; } }catch{} try{ CloseWpf(); }catch{}
     try{ if(tray!=null){ tray.Visible=false; tray.Icon=null; tray.Dispose(); tray=null; } if(ownedIcon!=null) ownedIcon.Dispose(); }catch{} }
-  void ExitHelper(){ foreach(var a in Apps){ if(a.Hidden) ShowWin(a); if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } } Log("helper exit");
+  void ExitHelper(){ RestoreAllHidden(); foreach(var a in Apps){ if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } } Log("helper exit");
     var later=sync??SynchronizationContext.Current; if(later!=null) later.Post(delegate{ Cleanup(); ExitThread(); },null); else{ Cleanup(); ExitThread(); } }
 
   [STAThread] static void Main(){
@@ -302,7 +342,8 @@ partial class TrayHelper : ApplicationContext {
     IniPath=Path.Combine(Dir,"tray-helper.ini");
     if(Environment.CommandLine.Contains("--scan")){ LoadConfig(); try{ Catalog.Merge(Apps); }catch{} Scanner.WriteReport(Path.Combine(Dir,"scan.txt")); return; }
     bool created; var mx=new Mutex(true,"Local\\TrayHelper",out created); if(!created){ mx.Dispose(); var w=FindWindowEx(new IntPtr(-3),IntPtr.Zero,null,"TrayHelper.msg"); if(w!=IntPtr.Zero) PostMessage(w,Environment.CommandLine.Contains("--flyout")?0x8003u:0x8002u,IntPtr.Zero,IntPtr.Zero); return; } // 2nd launch opens settings
-    LoadConfig(); try{ Catalog.Merge(Apps); }catch(Exception ex){ Log("catalog "+ex.Message); } SaveAll();
+    LoadConfig(); try{ Catalog.Merge(Apps); }catch(Exception ex){ Log("catalog "+ex.Message); } SaveAll(); RecoverHidden();
+    AppDomain.CurrentDomain.UnhandledException+=delegate(object s,UnhandledExceptionEventArgs e){ try{ Log("fatal "+e.ExceptionObject); RestoreAllHidden(); }catch{} };
     try{ var mark=Path.Combine(Dir,"autostart.init"); if(!File.Exists(mark)){ StartWithWindows=true; File.WriteAllText(mark,DateTime.Now.ToString("s")); } }catch{}
     try{ Application.EnableVisualStyles(); Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
       Application.ThreadException+=delegate(object s,ThreadExceptionEventArgs e){ Log("ui "+e.Exception.Message); };

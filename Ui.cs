@@ -277,8 +277,8 @@ sealed class SettingsWindow:Window{
     st.Children.Add(Row("Export / import",null,io));
     var lf=Theme.MkBtn("Open folder","Btn"); lf.Click+=(s,e)=>{ try{ Process.Start("explorer.exe","\""+TrayHelper.Dir+"\""); }catch{} };
     st.Children.Add(Row("Config folder",null,lf));
-    var up=Theme.MkBtn("Check now","Btn"); up.Click+=(s,e)=>MessageBox.Show(this,"Automatic updates are not available yet (on the roadmap). You are on 0.5.2.","TrayHelper");
-    st.Children.Add(Row("Check for updates","0.5.2",up));
+    var up=Theme.MkBtn("Check now","Btn"); up.Click+=(s,e)=>MessageBox.Show(this,"Automatic updates are not available yet (on the roadmap). You are on "+TrayHelper.Version+".","TrayHelper");
+    st.Children.Add(Row("Check for updates",TrayHelper.Version,up));
     var rs=Theme.MkBtn("Reset…","Btn"); rs.Click+=(s,e)=>{ if(MessageBox.Show(this,"Reset TrayHelper's app list and settings to defaults?","TrayHelper",MessageBoxButton.YesNo)!=MessageBoxResult.Yes) return; try{ File.Copy(TrayHelper.IniPath,TrayHelper.IniPath+".bak",true); File.Delete(TrayHelper.IniPath); th.ReloadConfig(); Rebuild(); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } };
     st.Children.Add(Row("Reset to defaults",null,rs));
     var ah=Theme.T("Advanced",15,Theme.Text,FontWeights.SemiBold); ah.Margin=new Thickness(2,18,0,6); st.Children.Add(ah);
@@ -288,7 +288,7 @@ sealed class SettingsWindow:Window{
     var tx=new StackPanel(); tx.Children.Add(Theme.T(title,14,Theme.Text,FontWeights.Normal)); if(sub!=null){ var s=Theme.T(sub,12,Theme.Sub,FontWeights.Normal); tx.Children.Add(s); } tx.VerticalAlignment=VerticalAlignment.Center; g.Children.Add(tx); Grid.SetColumn(right,1); g.Children.Add(right); return Card(g); }
   UIElement AboutPage(){ var st=new StackPanel();
     var h=new StackPanel(); h.Orientation=Orientation.Horizontal; h.Margin=new Thickness(0,0,0,16); h.Children.Add(Theme.Img(Theme.Logo,64));
-    var ht=new StackPanel(); ht.Margin=new Thickness(16,0,0,0); ht.VerticalAlignment=VerticalAlignment.Center; ht.Children.Add(Theme.T("TrayHelper",26,Theme.Text,FontWeights.SemiBold)); ht.Children.Add(Theme.T("Close the window, keep the app.  ·  v0.5.2  ·  MIT, unofficial",13,Theme.Sub,FontWeights.Normal)); h.Children.Add(ht); st.Children.Add(h);
+    var ht=new StackPanel(); ht.Margin=new Thickness(16,0,0,0); ht.VerticalAlignment=VerticalAlignment.Center; ht.Children.Add(Theme.T("TrayHelper",26,Theme.Text,FontWeights.SemiBold)); ht.Children.Add(Theme.T("Close the window, keep the app.  ·  v"+TrayHelper.Version+"  ·  MIT, unofficial",13,Theme.Sub,FontWeights.Normal)); h.Children.Add(ht); st.Children.Add(h);
     var rm=new StackPanel(); string cl=null; try{ using(var rs=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("CHANGELOG.md")) if(rs!=null) using(var rd=new StreamReader(rs)) cl=rd.ReadToEnd(); }catch{}
     if(cl==null) cl="# Changelog\n\n## 0.5.0";
     foreach(var raw in cl.Replace("\r","").Split('\n')){ var line=raw.TrimEnd(); if(line.Length==0) continue; TextBlock t;
