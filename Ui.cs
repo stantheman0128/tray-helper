@@ -2,7 +2,7 @@ using System.Windows.Media.Animation;
 // Modern WPF UI (Windows 11 style) built in code: tray flyout (right-click) + settings window (left-click).
 using System; using System.Collections.Generic; using System.Diagnostics; using System.IO; using System.Linq; using System.Reflection; using System.Runtime.InteropServices; using System.Text;
 using System.Windows; using System.Windows.Controls; using System.Windows.Controls.Primitives; using System.Windows.Interop; using System.Windows.Markup; using System.Windows.Media; using System.Windows.Media.Effects; using System.Windows.Media.Imaging; using System.Windows.Threading;
-using Microsoft.Win32;
+using Microsoft.Win32; using Ellipse=System.Windows.Shapes.Ellipse;
 
 static class Theme{
   public static bool Dark;
@@ -106,6 +106,28 @@ static class Theme{
     grip.MouseLeftButtonUp+=(s,e)=>{ if(!drag) return; grip.ReleaseMouseCapture(); end(); if(to!=from){ var lst=rows.ToList(); lst.RemoveAt(from); lst.Insert(to,row); int baseIdx=panel.Children.IndexOf(rows.OrderBy(r=>panel.Children.IndexOf(r)).First());
         foreach(var r in rows) panel.Children.Remove(r); for(int i=0;i<lst.Count;i++) panel.Children.Insert(baseIdx+i,lst[i]); commit(lst.Select(r=>(AppTarget)r.Tag).ToList()); } e.Handled=true; };
     grip.LostMouseCapture+=(s,e)=>{ if(drag) end(); }; }
+  // Status dot on the app icon: green = window open, grey = hidden in the tray.
+  static readonly Brush DotOpen=MkFrozen(Color.FromRgb(0x3F,0xB9,0x50)), DotHidden=MkFrozen(Color.FromRgb(0x8A,0x8A,0x8A));
+  static Brush MkFrozen(Color c){ var b=new SolidColorBrush(c); b.Freeze(); return b; }
+  public static void SetDot(Ellipse d,AppTarget a){ var st=TrayHelper.StateOf(a); d.Visibility=st=="not running"?Visibility.Collapsed:Visibility.Visible; d.Fill=st=="hidden"?DotHidden:DotOpen; }
+  public static Grid IconDot(ImageSource src,double size,AppTarget a,out Ellipse dot){ var g=new Grid(); g.VerticalAlignment=VerticalAlignment.Center; g.Children.Add(Img(src,size));
+    dot=new System.Windows.Shapes.Ellipse(); double ds=Math.Max(8,size*0.32); dot.Width=ds; dot.Height=ds; dot.HorizontalAlignment=HorizontalAlignment.Right; dot.VerticalAlignment=VerticalAlignment.Bottom; dot.Margin=new Thickness(0,0,-2,-2); dot.Stroke=Bg; dot.StrokeThickness=1.5; SetDot(dot,a); g.Children.Add(dot); return g; }
+  // Shortcut recorder: click, press the keys. Esc cancels, Backspace/Delete clears. No dropdowns.
+  public static Border HotkeyBox(string cur,Func<string,bool> set,Action<bool> recording){ var b=new Border(); b.CornerRadius=new CornerRadius(4); b.BorderThickness=new Thickness(1); b.BorderBrush=Line; b.Background=Card; b.Padding=new Thickness(10,5,10,5); b.MinWidth=150; b.Focusable=true; b.Cursor=System.Windows.Input.Cursors.Hand;
+    var t=T(string.IsNullOrEmpty(cur)?"None":cur,13,Text,FontWeights.Normal); t.HorizontalAlignment=HorizontalAlignment.Center; b.Child=t; string val=cur??"";
+    Action show=()=>{ t.Text=val.Length==0?"None":val; t.Foreground=Text; b.BorderBrush=Line; };
+    b.MouseLeftButtonDown+=(s,e)=>{ b.Focus(); System.Windows.Input.Keyboard.Focus(b); e.Handled=true; };
+    b.GotKeyboardFocus+=(s,e)=>{ recording(true); t.Text="Press keys…"; t.Foreground=Sub; b.BorderBrush=Accent; };
+    b.LostKeyboardFocus+=(s,e)=>{ show(); recording(false); };
+    b.PreviewKeyDown+=(s,e)=>{ e.Handled=true; var k=e.Key==System.Windows.Input.Key.System?e.SystemKey:e.Key; var m=System.Windows.Input.Keyboard.Modifiers;
+      if(k==System.Windows.Input.Key.Escape){ System.Windows.Input.Keyboard.ClearFocus(); return; }
+      if(k==System.Windows.Input.Key.Back||k==System.Windows.Input.Key.Delete){ val=""; set(""); System.Windows.Input.Keyboard.ClearFocus(); return; }
+      var parts=new List<string>(); if((m&System.Windows.Input.ModifierKeys.Control)!=0) parts.Add("Ctrl"); if((m&System.Windows.Input.ModifierKeys.Alt)!=0) parts.Add("Alt"); if((m&System.Windows.Input.ModifierKeys.Shift)!=0) parts.Add("Shift"); if((m&System.Windows.Input.ModifierKeys.Windows)!=0) parts.Add("Win");
+      bool modOnly=k==System.Windows.Input.Key.LeftCtrl||k==System.Windows.Input.Key.RightCtrl||k==System.Windows.Input.Key.LeftAlt||k==System.Windows.Input.Key.RightAlt||k==System.Windows.Input.Key.LeftShift||k==System.Windows.Input.Key.RightShift||k==System.Windows.Input.Key.LWin||k==System.Windows.Input.Key.RWin;
+      if(modOnly||parts.Count==0||(parts.Count==1&&parts[0]=="Shift")){ t.Text=parts.Count>0?string.Join(" + ",parts)+" + …":"Press keys…"; return; }
+      parts.Add(((System.Windows.Forms.Keys)System.Windows.Input.KeyInterop.VirtualKeyFromKey(k)).ToString()); var spec=string.Join("+",parts);
+      recording(false); bool ok=set(spec); val=spec; System.Windows.Input.Keyboard.ClearFocus(); show(); if(!ok){ t.Text=spec+"  (in use)"; t.Foreground=Brushes.IndianRed; b.BorderBrush=Brushes.IndianRed; } };
+    return b; }
   public static Border Badge(string text){ var b=new Border(); b.CornerRadius=new CornerRadius(4); b.Background=new SolidColorBrush(Color.FromArgb(0x33,0xF5,0xA6,0x23)); b.Padding=new Thickness(6,1,6,1); b.Margin=new Thickness(8,0,0,0); b.VerticalAlignment=VerticalAlignment.Center;
     b.Child=T(text,10.5,new SolidColorBrush(Color.FromRgb(0xF5,0xA6,0x23)),FontWeights.SemiBold); return b; }
   public static UIElement NameLine(AppTarget a,double size){ var sp=new StackPanel(); sp.Orientation=Orientation.Horizontal; sp.Children.Add(T(a.Name,size,Text,FontWeights.Normal)); if(a.Note=="experimental") sp.Children.Add(Badge("Experimental")); return sp; }
@@ -144,7 +166,7 @@ partial class TrayHelper{
     foreach(var a0 in Apps.Where(x=>x.Enabled&&!x.Native&&x.Running).ToList()){ var a=a0;
       var row=new Grid(); row.Margin=new Thickness(6,9,12,9);
       row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto}); row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto}); row.ColumnDefinitions.Add(new ColumnDefinition()); row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
-      var grip=Theme.Grip(); row.Children.Add(grip); var ic=Theme.Img(Theme.AppIcon(a.IconExe),24); Grid.SetColumn(ic,1); row.Children.Add(ic);
+      var grip=Theme.Grip(); row.Children.Add(grip); Ellipse fdot; var ic=Theme.IconDot(Theme.AppIcon(a.IconExe),24,a,out fdot); Grid.SetColumn(ic,1); row.Children.Add(ic);
       var tx=new StackPanel(); tx.Margin=new Thickness(12,0,8,0); tx.VerticalAlignment=VerticalAlignment.Center; tx.Children.Add(Theme.NameLine(a,13.5)); tx.Children.Add(Theme.T(Theme.StatusText(a),11.5,Theme.Sub,FontWeights.Normal));
       Grid.SetColumn(tx,2); row.Children.Add(tx);
       if(a.Native){ var nl=Theme.T("Native",12,Theme.Sub,FontWeights.Normal); nl.ToolTip=a.Hint; Grid.SetColumn(nl,3); row.Children.Add(nl); } else { var sw=Theme.Switch(a.Enabled); sw.Click+=(s,e)=>SetEnabled(a,sw.IsChecked==true); Grid.SetColumn(sw,3); row.Children.Add(sw); }
@@ -197,7 +219,7 @@ partial class TrayHelper{
 
 sealed class SettingsWindow:Window{
   readonly TrayHelper th; bool reallyClose; ContentControl page; RadioButton navApps, navGeneral, navAbout;
-  readonly Dictionary<AppTarget,TextBlock> statusLabels=new Dictionary<AppTarget,TextBlock>(); DispatcherTimer timer;
+  readonly Dictionary<AppTarget,TextBlock> statusLabels=new Dictionary<AppTarget,TextBlock>(); readonly Dictionary<AppTarget,Ellipse> dots=new Dictionary<AppTarget,Ellipse>(); DispatcherTimer timer;
   public SettingsWindow(TrayHelper th){ this.th=th; Title="TrayHelper"; Width=TrayHelper.WinW>=620?TrayHelper.WinW:900; Height=TrayHelper.WinH>=400?TrayHelper.WinH:600; MinWidth=620; MinHeight=400; WindowStartupLocation=WindowStartupLocation.CenterScreen;
 
     Background=Theme.Bg; FontFamily=Theme.Font; Resources.MergedDictionaries.Add(Theme.Res); Icon=Theme.Logo;
@@ -210,12 +232,12 @@ sealed class SettingsWindow:Window{
     root.Children.Add(side);
     var sv=new ScrollViewer(); sv.VerticalScrollBarVisibility=ScrollBarVisibility.Auto; page=new ContentControl(); page.Margin=new Thickness(20,18,28,24); sv.Content=page; Grid.SetColumn(sv,1); root.Children.Add(sv);
     Content=root; navApps.IsChecked=true;
-    timer=new DispatcherTimer(); timer.Interval=TimeSpan.FromSeconds(1); timer.Tick+=(s,e)=>{ foreach(var kv in statusLabels) kv.Value.Text=Theme.StatusText(kv.Key); }; timer.Start();
+    timer=new DispatcherTimer(); timer.Interval=TimeSpan.FromSeconds(1); timer.Tick+=(s,e)=>{ foreach(var kv in statusLabels) kv.Value.Text=Theme.StatusText(kv.Key); foreach(var kv in dots) Theme.SetDot(kv.Value,kv.Key); }; timer.Start();
   }
   RadioButton Nav(string glyph,string text){ var r=new RadioButton(); r.Style=(Style)Theme.Res["Nav"]; r.GroupName="nav";
     var sp=new StackPanel(); sp.Orientation=Orientation.Horizontal; sp.Children.Add(Theme.Glyph(glyph,16,Theme.Text)); var t=Theme.T(text,14,Theme.Text,FontWeights.Normal); t.Margin=new Thickness(12,0,0,0); sp.Children.Add(t); r.Content=sp;
     r.Checked+=(s,e)=>Rebuild(); return r; }
-  public void Rebuild(){ statusLabels.Clear(); if(navGeneral.IsChecked==true) page.Content=GeneralPage(); else if(navAbout.IsChecked==true) page.Content=AboutPage(); else page.Content=AppsPage(); }
+  public void Rebuild(){ statusLabels.Clear(); dots.Clear(); if(navGeneral.IsChecked==true) page.Content=GeneralPage(); else if(navAbout.IsChecked==true) page.Content=AboutPage(); else page.Content=AppsPage(); }
   static Border Card(UIElement child){ var b=new Border(); b.CornerRadius=new CornerRadius(6); b.Background=Theme.Card; b.BorderBrush=Theme.Line; b.BorderThickness=new Thickness(1); b.Padding=new Thickness(16,12,16,12); b.Margin=new Thickness(0,0,0,4); b.Child=child; return b; }
   static StackPanel Header(string title,string sub){ var s=new StackPanel(); s.Margin=new Thickness(0,0,0,16); s.Children.Add(Theme.T(title,26,Theme.Text,FontWeights.SemiBold)); if(sub==null) return s; var d=Theme.T(sub,13,Theme.Sub,FontWeights.Normal); d.TextWrapping=TextWrapping.Wrap; d.Margin=new Thickness(0,4,0,0); s.Children.Add(d); return s; }
   bool scanning;
@@ -245,7 +267,7 @@ sealed class SettingsWindow:Window{
       var outerG=new Grid(); outerG.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto}); outerG.ColumnDefinitions.Add(new ColumnDefinition());
       var gripA=Theme.Grip(); outerG.Children.Add(gripA);
       var g=new Grid(); Grid.SetColumn(g,1); outerG.Children.Add(g); foreach(var w in new[]{GridLength.Auto,new GridLength(1,GridUnitType.Star),GridLength.Auto,GridLength.Auto,GridLength.Auto}) g.ColumnDefinitions.Add(new ColumnDefinition{Width=w});
-      g.Children.Add(Theme.Img(Theme.AppIcon(a.IconExe),32));
+      Ellipse sdot; g.Children.Add(Theme.IconDot(Theme.AppIcon(a.IconExe),32,a,out sdot)); dots[a]=sdot;
       var tx=new StackPanel(); tx.Margin=new Thickness(14,0,12,0); tx.VerticalAlignment=VerticalAlignment.Center;
       tx.Children.Add(Theme.NameLine(a,14)); var stt=Theme.T(Theme.StatusText(a),12,Theme.Sub,FontWeights.Normal); statusLabels[a]=stt; tx.Children.Add(stt);
       Grid.SetColumn(tx,1); g.Children.Add(tx);
@@ -270,6 +292,7 @@ sealed class SettingsWindow:Window{
   UIElement GeneralPage(){ var st=new StackPanel(); st.Children.Add(Header("Settings",null));
     st.Children.Add(Row("Start with Windows",null,Labeled("",TrayHelper.StartWithWindows,v=>TrayHelper.StartWithWindows=v)));
     st.Children.Add(Row("Notifications",null,Labeled("",TrayHelper.NotifyFirstHide,v=>{ TrayHelper.NotifyFirstHide=v; TrayHelper.SaveAll(); })));
+    st.Children.Add(Row("Show all hidden apps",null,Theme.HotkeyBox(TrayHelper.HkRestoreAll,v=>{ TrayHelper.HkRestoreAll=v; TrayHelper.SaveAll(); th.ApplyHotkeys(); bool ok; return !th.HotkeyOk.TryGetValue(1,out ok)||ok; },r=>th.SuspendHotkeys(r))));
     var io=new StackPanel(); io.Orientation=Orientation.Horizontal;
     var ex=Theme.MkBtn("Export…","Btn"); ex.Click+=(s,e)=>{ var d=new SaveFileDialog(); d.FileName="tray-helper.ini"; d.Filter="TrayHelper config|*.ini"; if(d.ShowDialog(this)==true){ try{ TrayHelper.SaveAll(); File.Copy(TrayHelper.IniPath,d.FileName,true); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } } };
     var im=Theme.MkBtn("Import…","Btn"); im.Margin=new Thickness(8,0,0,0); im.Click+=(s,e)=>{ var d=new OpenFileDialog(); d.Filter="TrayHelper config|*.ini"; if(d.ShowDialog(this)==true){ try{ File.Copy(d.FileName,TrayHelper.IniPath,true); th.ReloadConfig(); Rebuild(); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } } };

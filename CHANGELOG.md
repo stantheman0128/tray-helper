@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1
+- Shortcut to show all hidden apps (default Ctrl+Alt+Up), set it with a click-and-press recorder in Settings
+- Status dot on each app icon: green = open, grey = hidden in the tray
+- Middle-click an app's tray icon to quit it (not Grok Bot)
+- Cleaner tray icons: solid backgrounds made transparent, sharp at any scaling
+
 ## 0.6.0
 - Hidden windows survive a TrayHelper crash: they're re-adopted on the next start, and Exit always brings everything back
 - If an app can't be hidden, X / Alt+F4 now close it normally instead of doing nothing
