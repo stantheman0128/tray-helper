@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.1
+- Per-user installer and uninstaller (no admin): installs to %LOCALAPPDATA%\TrayHelper, keeps your settings, restores hidden windows on uninstall
+- Code-signing script and file version info (prep for fewer antivirus false positives)
+
 ## 0.7.0
 - Send any window to the tray with a shortcut (default Ctrl+Alt+Down); its tray icon disappears once you bring it back
 - Store / UWP apps are hidden on a separate hidden desktop: no taskbar ghost (Settings → Advanced, on by default)

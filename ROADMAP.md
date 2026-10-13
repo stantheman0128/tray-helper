@@ -4,10 +4,9 @@ Current stage: **MVP** (speed over polish). Grok CLI will handle the hardening, 
 
 ## Next
 - ~~Crash-loop backoff~~ (done: max 3 relaunches in 5 min, exponential delay).
-- **Installer / uninstaller**: copy to `%LOCALAPPDATA%\TrayHelper`, add a Startup shortcut, migrate the old `GrokBotTray` ini, and remove GrokBotTray.
+- ~~**Installer / uninstaller**~~ (done 0.7.1: installer\\install.ps1 / uninstall.ps1; a packaged setup.exe is still open): copy to `%LOCALAPPDATA%\TrayHelper`, add a Startup shortcut, migrate the old `GrokBotTray` ini, and remove GrokBotTray.
 - **README (EN + zh-TW)**: what it does, screenshots, presets, FAQ (elevated apps, UWP limits).
 - **Store/MSIX ExePath auto-detect**: the picker already resolves the AUMID (`shell:AppsFolder\<AUMID>`). Also resolve it for hand-written entries and when a package version changes.
-- Per-app tray icons (optional), and better tooltips.
 - A fallback for apps with custom title bars that ignore `WM_NCHITTEST` (geometric caption-button mode).
 
 ## Background auto-update of TrayHelper
@@ -23,9 +22,8 @@ Current stage: **MVP** (speed over polish). Grok CLI will handle the hardening, 
 - Watch candidates: Grok Bot, Claude Desktop, OpenCode, Hermes Agent, Obsidian.
 
 ## Later
-- Hotkey to show or hide apps.
 - Live reload when the ini is edited by hand.
-- Optional code signing to cut AV false positives.
+- Code signing: script ready (installer\sign.ps1, 0.7.1); needs a certificate.
 
 ## Notes (MVP 0.4)
 - Keyboard interception: Alt+F4 is always intercepted for apps with close-to-tray on. Ctrl+Q / Ctrl+W are intercepted only when the app's main window is in the foreground, and only when enabled per app with `InterceptCtrlQ=true` / `InterceptCtrlW=true` in the ini. Defaults: Ctrl+Q is on for Thunderbird (where it quits the app). Ctrl+W is off everywhere, because in most apps it closes a tab, not the window.

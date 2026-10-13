@@ -3,6 +3,8 @@
 using System; using System.Linq; using System.Collections.Generic; using System.Diagnostics; using System.Drawing; using System.IO; using System.Reflection;
 using System.Runtime.InteropServices; using System.Text; using System.Threading; using System.Windows.Forms;
 
+[assembly: AssemblyTitle("TrayHelper")] [assembly: AssemblyProduct("TrayHelper")] [assembly: AssemblyDescription("Close the window, keep the app")] [assembly: AssemblyCompany("Stan Shih")] [assembly: AssemblyCopyright("MIT License")] [assembly: AssemblyVersion("0.7.1.0")] [assembly: AssemblyFileVersion("0.7.1.0")]
+
 sealed class CloseSnap{ public readonly int l,t,r,b; public CloseSnap(int l,int t,int r,int b){ this.l=l; this.t=t; this.r=r; this.b=b; } }
 
 sealed class AppTarget{ public bool wasMax, wasMin; public bool geoLogged;
@@ -18,7 +20,7 @@ sealed class AppTarget{ public bool wasMax, wasMin; public bool geoLogged;
 }
 
 partial class TrayHelper : ApplicationContext {
-  internal const string Version="0.7.0";
+  internal const string Version="0.7.1";
   internal static string HkRestoreAll="Ctrl+Alt+Up", HkSendToTray="Ctrl+Alt+Down"; internal static bool UwpVd=true;
   internal static List<AppTarget> Temps=new List<AppTarget>();
   internal static bool OpenMaximized=true; internal static double WinW=0,WinH=0,WinL=double.NaN,WinT=double.NaN; internal static bool WinMax=true; internal static long MaxLogBytes=256*1024; internal static int StartDelay=0; internal static List<string> Exclude=new List<string>{"Raycast","chrome","msedge","firefox","explorer","TrayHelper","Grok Bot","ShellExperienceHost","SearchHost","StartMenuExperienceHost","TextInputHost","LockApp"}; internal static bool NotifyFirstHide=true, LogVerbose=false; const int WM_HIDE=0x8001;
@@ -65,7 +67,7 @@ partial class TrayHelper : ApplicationContext {
 
   sealed class UiWin:NativeWindow{ readonly TrayHelper o; public UiWin(TrayHelper o){ this.o=o; }
     public void Open(){ var cp=new CreateParams(); cp.Caption="TrayHelper.msg"; cp.Parent=new IntPtr(-3); CreateHandle(cp); }
-    protected override void WndProc(ref Message m){ if(m.Msg==0x0312){ try{ o.OnHotkey(m.WParam.ToInt32()); }catch(Exception ex){ Log("hotkey "+ex.Message); } } if(m.Msg==0x8002){ try{ o.ShowSettings(); }catch(Exception ex){ Log("settings "+ex); } } if(m.Msg==0x8003){ try{ o.ShowFlyout(); }catch(Exception ex){ Log("flyout "+ex); } } if(m.Msg==WM_HIDE){ try{ o.OnUiHide(); }catch{ o.hookFault=true; } } base.WndProc(ref m); } }
+    protected override void WndProc(ref Message m){ if(m.Msg==0x0312){ try{ o.OnHotkey(m.WParam.ToInt32()); }catch(Exception ex){ Log("hotkey "+ex.Message); } } if(m.Msg==0x8002){ try{ o.ShowSettings(); }catch(Exception ex){ Log("settings "+ex); } } if(m.Msg==0x8004){ try{ o.ExitHelper(); }catch{} } if(m.Msg==0x8003){ try{ o.ShowFlyout(); }catch(Exception ex){ Log("flyout "+ex); } } if(m.Msg==WM_HIDE){ try{ o.OnUiHide(); }catch{ o.hookFault=true; } } base.WndProc(ref m); } }
 
   NotifyIcon tray; System.Windows.Forms.Timer moveTimer; WinEventProc weProc; IntPtr weHook, fgHook; System.Windows.Forms.Timer timer; UiWin ui; Icon ownedIcon;
   IntPtr uiHwnd, mHook, kHook; HookProc mProc,kProc; SynchronizationContext sync;
