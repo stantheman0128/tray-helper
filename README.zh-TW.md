@@ -6,6 +6,10 @@ TrayHelper 是 Windows 10/11 的系統匣小工具。有些 App 按 X（或 Alt+
 
 非官方、MIT 授權、只裝在目前使用者（不需系統管理員）。
 
+[![TrayHelper 示範影片](docs/demo/poster.png)](docs/demo/tray-helper-demo.mp4)
+
+▶ [觀看示範影片（MP4，附字幕）](docs/demo/tray-helper-demo.mp4) · 73 秒，英文旁白，附英文＋繁體中文字幕（[en.srt](docs/demo/en.srt)、[zh-TW.srt](docs/demo/zh-TW.srt)）
+
 ## 功能
 - **任何 App 都能關閉縮到系統匣**：X 按鈕、Alt+F4，可選 Ctrl+Q / Ctrl+W。
 - **多視窗 App 跟 macOS 一樣**：開著好幾個視窗時按 X 會真的關掉那一個，只有最後一個才收進系統匣。藏了好幾個視窗時，右鍵選單會逐一列出可個別叫回，另有「Restore all」。

@@ -1,0 +1,93 @@
+1
+00:00:00,000 --> 00:00:03,455
+So I built this app called TrayHelper,
+totally with Grok Bot.
+
+2
+00:00:03,545 --> 00:00:06,636
+What I can do is turn it on
+for, say, Grok Bot,
+
+3
+00:00:06,727 --> 00:00:09,455
+so that when I'm using Grok Bot
+
+4
+00:00:09,545 --> 00:00:13,000
+and I close it,
+the app doesn't shut down.
+
+5
+00:00:13,000 --> 00:00:17,000
+It's still available
+through the tray icon right here.
+
+6
+00:00:17,000 --> 00:00:19,182
+I can click it and it opens.
+
+7
+00:00:19,273 --> 00:00:22,455
+The same works for Cursor, because Cursor
+doesn't natively support this feature.
+
+8
+00:00:22,545 --> 00:00:28,364
+If I want to just close the window
+but keep Cursor running in the background,
+
+9
+00:00:28,364 --> 00:00:31,364
+I just click once, and it works now.
+
+10
+00:00:31,455 --> 00:00:36,000
+So I hope Grok Bot and Cursor
+can support this feature in the future,
+
+11
+00:00:36,091 --> 00:00:40,909
+because it really helps keep
+a tidy window and a tidy taskbar.
+
+12
+00:00:41,727 --> 00:00:45,364
+It also supports other apps
+that don't even have this feature,
+
+13
+00:00:45,909 --> 00:00:50,545
+for example Excel. People usually
+don't expect Excel to have this,
+
+14
+00:00:50,636 --> 00:00:53,091
+but I can open Excel and close it,
+
+15
+00:00:53,182 --> 00:00:57,182
+and look, Excel is in the tray —
+I don't think you've seen this before.
+
+16
+00:00:57,273 --> 00:01:00,455
+And with a click, you can open it again.
+
+17
+00:01:01,273 --> 00:01:02,909
+The UI looks good here, too.
+
+18
+00:01:03,000 --> 00:01:06,455
+I can hide it to the tray, quit Excel,
+
+19
+00:01:06,545 --> 00:01:09,091
+turn off this feature,
+or just open TrayHelper.
+
+20
+00:01:09,545 --> 00:01:12,727
+I'm super amazed by
+what Grok Bot can do here.
+

@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Docs: demo video in the README (docs/demo/tray-helper-demo.mp4, English narration, burned-in English + Traditional Chinese subtitles; SRT files alongside)
+
 ## 0.9.0
 - Multi-window apps work like macOS: X / Alt+F4 on one of several open windows closes it; the last one goes to the tray
 - Several hidden windows of one app: the tray menu lists each by title to restore it on its own, plus Restore all; a left click restores them all
