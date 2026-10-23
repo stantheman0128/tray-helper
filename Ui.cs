@@ -133,7 +133,7 @@ static class Theme{
     b.Child=T(text,10.5,new SolidColorBrush(Color.FromRgb(0xF5,0xA6,0x23)),FontWeights.SemiBold); return b; }
   public static UIElement NameLine(AppTarget a,double size){ var sp=new StackPanel(); sp.Orientation=Orientation.Horizontal; sp.Children.Add(T(a.Name,size,Text,FontWeights.Normal)); if(a.Note=="experimental") sp.Children.Add(Badge("Experimental")); return sp; }
   public static TextBlock Grip(){ var g=T("⋮⋮",14,Sub,FontWeights.Bold); g.Margin=new Thickness(0,0,10,0); g.Background=Brushes.Transparent; g.Padding=new Thickness(2,6,2,6); return g; }
-  public static string StatusText(AppTarget a){ var s=TrayHelper.StateOf(a); string t=s=="hidden"?"Hidden in tray":s=="visible"?"Running":"Not running"; if(!string.IsNullOrEmpty(a.Note)&&a.Note!="experimental") t+=" · "+a.Note; return t; }
+  public static string StatusText(AppTarget a){ var s=TrayHelper.StateOf(a); int hn=a.HidAlive; string t=s=="hidden"?(hn>1?"Hidden in tray · "+hn+" windows":"Hidden in tray"):s=="visible"?(hn>0?"Running · "+hn+" hidden":"Running"):"Not running"; if(!string.IsNullOrEmpty(a.Note)&&a.Note!="experimental") t+=" · "+a.Note; return t; }
 }
 
 partial class TrayHelper{
@@ -202,10 +202,12 @@ partial class TrayHelper{
     var hd=new StackPanel(); hd.Orientation=Orientation.Horizontal; hd.Margin=new Thickness(10,6,10,8); hd.Children.Add(Theme.Img(Theme.AppIcon(a.IconExe),18)); var ht=Theme.T(a.Name,13,Theme.Text,FontWeights.SemiBold); ht.Margin=new Thickness(8,0,0,0); hd.Children.Add(ht); st.Children.Add(hd);
     Action<string,string,Action> item=(g,t,act)=>{ var sp=new StackPanel(); sp.Orientation=Orientation.Horizontal; sp.Children.Add(Theme.Glyph(g,14,Theme.Text)); var tt=Theme.T(t,13,Theme.Text,FontWeights.Normal); tt.Margin=new Thickness(10,0,0,0); sp.Children.Add(tt);
       var b=Theme.MkBtn(sp,"Link"); b.HorizontalAlignment=HorizontalAlignment.Stretch; b.HorizontalContentAlignment=HorizontalAlignment.Left; b.Click+=(s,e)=>{ w.Close(); act(); }; st.Children.Add(b); };
-    item(a.Hidden?"\uE8A7":"\uE738",a.Hidden?"Show":"Hide to tray",()=>{ if(a.Hidden) ShowApp(a); else Hide_(a); });
+    var hw=a.hid.Where(q=>IsWindow(q.H)).Select(q=>q.H).ToList();
+    if(hw.Count>1){ foreach(var h0 in hw){ var h=h0; var tl=TitleOf(h); if(tl.Length==0) tl=a.Name; if(tl.Length>48) tl=tl.Substring(0,47)+"…"; item("\uE8A7",tl,()=>ShowOneWin(a,h)); } item("\uE8A7","Restore all",()=>ShowApp(a)); if(a.OpenCount>0) item("\uE738","Hide to tray",()=>Hide_(a)); }
+    else item(a.weHid||a.Hidden?"\uE8A7":"\uE738",a.weHid||a.Hidden?"Show":"Hide to tray",()=>{ if(a.weHid||a.Hidden) ShowApp(a); else Hide_(a); });
     item("\uE711","Quit "+a.Name,()=>QuitApp(a));
     if(!a.Temp){ var sep=new Border(); sep.Height=1; sep.Background=Theme.Line; sep.Margin=new Thickness(6,4,6,4); st.Children.Add(sep);
-    item("\uE7E8","Disable close-to-tray",()=>{ if(a.Hidden) ShowApp(a); SetEnabled(a,false); }); }
+    item("\uE7E8","Disable close-to-tray",()=>{ if(a.weHid||a.Hidden) ShowApp(a); SetEnabled(a,false); }); }
     item("\uE713","TrayHelper settings",()=>ShowSettings());
     w.Content=outer; w.Deactivated+=(s,e)=>{ try{ w.Close(); }catch{} };
     var cur=System.Windows.Forms.Cursor.Position; w.Show();
@@ -273,9 +275,12 @@ sealed class SettingsWindow:Window{
       var tx=new StackPanel(); tx.Margin=new Thickness(14,0,12,0); tx.VerticalAlignment=VerticalAlignment.Center;
       tx.Children.Add(Theme.NameLine(a,14)); var stt=Theme.T(Theme.StatusText(a),12,Theme.Sub,FontWeights.Normal); statusLabels[a]=stt; tx.Children.Add(stt);
       Grid.SetColumn(tx,1); g.Children.Add(tx);
-      if(TrayHelper.SuggestNative(a,owners)){ var nb=new StackPanel(); nb.Orientation=Orientation.Horizontal; nb.Margin=new Thickness(0,4,0,0); var bdg=Theme.Badge("Has its own tray icon"); bdg.Margin=new Thickness(0,0,6,0); nb.Children.Add(bdg);
-        var use=Theme.MkBtn(Theme.T("Use built-in",12,Theme.Accent,FontWeights.Normal),"Link"); use.ToolTip="Turn off TrayHelper for "+a.Name+" and open it, so you can switch on its own close-to-tray option"; use.Click+=(s,e)=>{ th.UseNative(a); Rebuild(); }; nb.Children.Add(use);
-        var dis=Theme.MkBtn(Theme.Glyph("\uE711",10,Theme.Sub),"Link"); dis.ToolTip="Keep using TrayHelper"; dis.Click+=(s,e)=>{ th.DismissNative(a); Rebuild(); }; nb.Children.Add(dis); tx.Children.Add(nb); }
+      int offer=TrayHelper.NativeOffer(a,owners);
+      if(offer>0){ var nb=new StackPanel(); nb.Orientation=Orientation.Horizontal; nb.Margin=new Thickness(-8,2,0,0);
+        if(offer==2){ var bdg=Theme.Badge("May have its own tray option"); bdg.Margin=new Thickness(8,0,2,0); nb.Children.Add(bdg); }
+        var use=Theme.MkBtn(Theme.T("Use built-in",11.5,offer==2?Theme.Accent:Theme.Sub,FontWeights.Normal),"Link"); use.ToolTip="Turn off TrayHelper for "+a.Name+" and open its settings"; use.Click+=(s,e)=>{ th.UseNative(a); Rebuild(); }; nb.Children.Add(use);
+        if(offer==2){ var dis=Theme.MkBtn(Theme.Glyph("\uE711",10,Theme.Sub),"Link"); dis.ToolTip="Hide this hint"; dis.Click+=(s,e)=>{ th.DismissNative(a); Rebuild(); }; nb.Children.Add(dis); }
+        tx.Children.Add(nb); }
       var show=Theme.MkBtn("Show","Btn"); show.Click+=(s,e)=>th.Show_(a); show.Margin=new Thickness(0,0,16,0); Grid.SetColumn(show,2); g.Children.Add(show);
 
       var ct=Labeled("Close to tray",a.Enabled,v=>th.SetEnabled(a,v)); Grid.SetColumn(ct,4); g.Children.Add(ct);

@@ -87,12 +87,12 @@ partial class TrayHelper{
     foreach(var n in fresh){ var o=Apps.FirstOrDefault(x=>!keep.Contains(x)&&string.Equals(x.Name,n.Name,StringComparison.OrdinalIgnoreCase));
       if(o==null){ keep.Add(n); Log("ini: added "+n.Name); continue; }
       bool ident=o.ProcName!=n.ProcName||o.WinClass!=n.WinClass||o.WinTitle!=n.WinTitle, off=(o.Enabled&&!n.Enabled)||(!o.Native&&n.Native);
-      if((ident||off)&&o.weHid&&o.Hidden) ShowWin(o); if(ident){ o.hwnd=IntPtr.Zero; o.weHid=false; o.vd=false; }
+      if((ident||off)&&o.weHid) ShowWin(o); if(ident){ o.hwnd=IntPtr.Zero; o.hid.Clear(); o.wins=new IntPtr[0]; }
       if(o.Enabled!=n.Enabled) Log(o.Name+": enabled="+n.Enabled+" (ini)");
       o.Id=n.Id; o.ExePath=n.ExePath; o.ProcName=n.ProcName; o.WinClass=n.WinClass; o.WinTitle=n.WinTitle; o.Enabled=n.Enabled; o.CtrlQ=n.CtrlQ; o.CtrlW=n.CtrlW; o.Notified=n.Notified; o.Geometric=n.Geometric;
-      o.UserNative=n.UserNative; o.Native=n.Native; o.NativeDismissed=n.NativeDismissed; o.Preset=n.Preset; o.Detected=n.Detected; o.Note=n.Note; o.Hint=n.Hint; o.SettingsKeys=n.SettingsKeys; o.NativeTray=n.NativeTray;
+      o.UserNative=n.UserNative; o.Native=n.Native; o.NativeDismissed=n.NativeDismissed; o.NativeOffer=n.NativeOffer; o.Preset=n.Preset; o.Detected=n.Detected; o.Note=n.Note; o.Hint=n.Hint; o.SettingsKeys=n.SettingsKeys; o.NativeTray=n.NativeTray;
       if(BadIcon(o.IconExe)&&n.IconExe!=null){ o.IconExe=n.IconExe; o.TrayIcon=null; } o.snap=null; keep.Add(o); }
-    foreach(var o in Apps) if(!keep.Contains(o)){ if(o.weHid&&o.Hidden) ShowWin(o); o.snap=null; if(o.Tray!=null){ o.Tray.Visible=false; o.Tray.Dispose(); o.Tray=null; } Log("ini: removed "+o.Name); }
+    foreach(var o in Apps) if(!keep.Contains(o)){ if(o.weHid) ShowWin(o); o.snap=null; if(o.Tray!=null){ o.Tray.Visible=false; o.Tray.Dispose(); o.Tray=null; } Log("ini: removed "+o.Name); }
     Apps.Clear(); Apps.AddRange(keep); snapApps=Apps.ToArray(); foreach(var a in Apps) SyncAppTray(a,a.Running);
     if(h1!=HkRestoreAll||h2!=HkSendToTray) ApplyHotkeys(); SaveHidden(); if(settingsWin!=null&&settingsWin.IsVisible) settingsWin.Rebuild(); }
 
@@ -136,9 +136,12 @@ partial class TrayHelper{
   // Test instances only: --test-update <exeUrl> <sha256Url> <tag> runs the real download/verify/swap/restart path (file:// URLs work).
   void TestUpdateArg(){ if(!TestMode) return; var ar=Environment.GetCommandLineArgs(); int i=Array.IndexOf(ar,"--test-update"); if(i<0||i+3>=ar.Length) return; updExe=ar[i+1]; updSha=ar[i+2]; UpdateTag=ar[i+3]; Log("test update to "+UpdateTag); InstallUpdate(); }
   // ---------- native close-to-tray: suggest retiring our toggle for apps that already own a tray icon ----------
-  public static bool SuggestNative(AppTarget a,HashSet<string> owners){ if(a.Native||a.NativeDismissed||a.Temp||a.IsGrok||string.IsNullOrEmpty(a.ProcName)) return false;
-    return a.ProcName.Split('|').Any(p=>owners.Contains(p.Trim())); }
-  public void UseNative(AppTarget a){ if(a.weHid&&a.Hidden) ShowWin(a); a.UserNative=true; a.Native=true; a.Enabled=false; a.snap=null; SyncAppTray(a,a.Running); SaveAll(); Log(a.Name+": switched to the app's own close-to-tray"); OpenAppSettings(a); }
-  public void UseOurs(AppTarget a){ a.UserNative=false; a.Native=Catalog.All.Any(p=>p.Id!=null&&p.Id==a.Id&&p.Native); a.NativeDismissed=true; a.Enabled=!a.Native; SyncAppTray(a,a.Running); SaveAll(); Log(a.Name+": back to TrayHelper close-to-tray"); }
+  // The tray-icon registry only proves the app once showed a tray icon, not that X keeps it running: it's a hint.
+  // 0 = nothing, 1 = small "Use built-in" link only, 2 = hint badge + link. The link stays once an app was suggested or used natively.
+  public static int NativeOffer(AppTarget a,HashSet<string> owners){ if(a.Native||a.Temp||a.IsGrok||string.IsNullOrEmpty(a.ProcName)) return 0;
+    bool owns=a.ProcName.Split('|').Any(p=>owners.Contains(p.Trim())); if(owns&&!a.NativeOffer){ a.NativeOffer=true; SaveAll(); }
+    if(!a.NativeOffer) return 0; return owns&&!a.NativeDismissed?2:1; }
+  public void UseNative(AppTarget a){ if(a.weHid) ShowWin(a); a.NativeOffer=true; a.UserNative=true; a.Native=true; a.Enabled=false; a.snap=null; SyncAppTray(a,a.Running); SaveAll(); Log(a.Name+": switched to the app's own close-to-tray"); OpenAppSettings(a); }
+  public void UseOurs(AppTarget a){ a.UserNative=false; a.Native=Catalog.All.Any(p=>p.Id!=null&&p.Id==a.Id&&p.Native); a.NativeDismissed=true; a.NativeOffer=true; a.Enabled=!a.Native; SyncAppTray(a,a.Running); SaveAll(); Log(a.Name+": back to TrayHelper close-to-tray"); }
   public void DismissNative(AppTarget a){ a.NativeDismissed=true; SaveAll(); }
 }

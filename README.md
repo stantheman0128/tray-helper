@@ -8,6 +8,7 @@ Unofficial, MIT-licensed, per-user (no admin).
 
 ## Features
 - **Close to tray** for any app: X button, Alt+F4, and optionally Ctrl+Q / Ctrl+W.
+- **Multi-window apps work like macOS**: closing one of several windows really closes it; only the last one goes to the tray. When several windows are hidden, the tray menu lists each one to restore on its own, plus **Restore all**.
 - **One tray icon per managed app**: left-click to show or hide, right-click for a menu, middle-click to quit the app.
 - **Send any window to the tray** with a shortcut (default **Ctrl+Alt+Down**). Its icon disappears once the window is back.
 - **Show all hidden apps** with one shortcut (default **Ctrl+Alt+Up**). Both shortcuts are set with a click-and-press recorder in Settings.

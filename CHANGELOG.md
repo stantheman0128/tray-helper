@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0
+- Multi-window apps work like macOS: X / Alt+F4 on one of several open windows closes it; the last one goes to the tray
+- Several hidden windows of one app: the tray menu lists each by title to restore it on its own, plus Restore all; a left click restores them all
+- Every hidden window is remembered across a TrayHelper crash or restart, not just one per app
+- Ctrl+Q hides all of the app's windows; Quit closes all of them
+- The send-to-tray shortcut on a managed app's window hides just that window
+- Suggestion for apps with their own tray icon now reads "May have its own tray option"
+- "Use built-in" stays available on the app's row after you pick TrayHelper or hide the hint
+
 ## 0.8.0
 - TrayHelper-Setup.exe: one-file per-user installer and uninstaller (keeps settings, hands hidden windows over to the new version)
 - Updates from GitHub Releases: Auto / Notify / Off; SHA-256 verified, keeps the previous version for rollback, no popups
