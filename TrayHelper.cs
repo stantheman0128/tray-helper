@@ -414,7 +414,7 @@ partial class TrayHelper : ApplicationContext {
     if(a.Tray!=null) return;
     if(a.TrayIcon==null){ try{ if(a.IconExe!=null) a.TrayIcon=LoadIcon(a.IconExe); }catch{} }
     var t=new NotifyIcon(); t.Icon=a.TrayIcon??ownedIcon??SystemIcons.Application; t.Text=a.Name.Length>63?a.Name.Substring(0,63):a.Name;
-    t.MouseUp+=(s,e)=>{ if(e.Button==MouseButtons.Right) ShowAppMenu(a); else if(e.Button==MouseButtons.Middle&&!a.IsGrok) QuitApp(a); }; // Grok Bot is the remote channel: never quit by a stray middle click
+    t.MouseUp+=(s,e)=>{ if(e.Button==MouseButtons.Right) ShowAppMenu(a); else if(e.Button==MouseButtons.Middle&&!a.IsGrok) QuitApp(a); }; // never quit Grok Bot by a stray middle click
     t.MouseClick+=(s,e)=>{ if(e.Button!=MouseButtons.Left) return; if(a.weHid||a.Hidden) ShowApp(a); else if(a.Running){ HideAll(a); a.snap=null; a.hiddenAt=DateTime.Now; Log(a.Name+": hid (tray click)"); } };
     t.Visible=true; a.Tray=t; }
   void ShowApp(AppTarget a){ a.gaveUp=false; a.relaunches.Clear(); a.userQuit=false; a.quitSawGone=false; a.hideNew=false;
