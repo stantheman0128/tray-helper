@@ -3,12 +3,12 @@
 using System; using System.Linq; using System.Collections.Generic; using System.Diagnostics; using System.Drawing; using System.IO; using System.Reflection;
 using System.Runtime.InteropServices; using System.Text; using System.Threading; using System.Windows.Forms;
 
-[assembly: AssemblyTitle("TrayHelper")] [assembly: AssemblyProduct("TrayHelper")] [assembly: AssemblyDescription("Close the window, keep the app")] [assembly: AssemblyCompany("Stan Shih")] [assembly: AssemblyCopyright("MIT License")] [assembly: AssemblyVersion("0.7.2.0")] [assembly: AssemblyFileVersion("0.7.2.0")]
+[assembly: AssemblyTitle("TrayHelper")] [assembly: AssemblyProduct("TrayHelper")] [assembly: AssemblyDescription("Close the window, keep the app")] [assembly: AssemblyCompany("Stan Shih")] [assembly: AssemblyCopyright("MIT License")] [assembly: AssemblyVersion("0.8.0.0")] [assembly: AssemblyFileVersion("0.8.0.0")]
 
 sealed class CloseSnap{ public readonly int l,t,r,b; public CloseSnap(int l,int t,int r,int b){ this.l=l; this.t=t; this.r=r; this.b=b; } }
 
 sealed class AppTarget{ public bool wasMax, wasMin; public bool geoLogged;
-  public string Name, ExePath, ProcName, WinClass, WinTitle, IconExe, Note; public bool Enabled=true, Watchdog=true, Preset, Detected=true, NativeTray, gaveUp, AlwaysRestart, RestartOnCrash, Native, Notified, Geometric;
+  public string Name, ExePath, ProcName, WinClass, WinTitle, IconExe, Note; public bool Enabled=true, Watchdog=true, Preset, Detected=true, NativeTray, gaveUp, AlwaysRestart, RestartOnCrash, Native, Notified, Geometric, UserNative, NativeDismissed;
   public string Id, Hint, SettingsKeys; public bool CtrlQ, CtrlW; public bool IsGrok{ get{ return Id=="grokbot"; } }
   public volatile bool moved; public NotifyIcon Tray; public Icon TrayIcon; public Process mainProc; public List<DateTime> relaunches=new List<DateTime>(); public DateTime nextTry=DateTime.MinValue;
   public IntPtr hwnd; public volatile CloseSnap snap;
@@ -20,7 +20,7 @@ sealed class AppTarget{ public bool wasMax, wasMin; public bool geoLogged;
 }
 
 partial class TrayHelper : ApplicationContext {
-  internal const string Version="0.7.2";
+  internal const string Version="0.8.0";
   internal static bool TestMode; static string MsgCaption{ get{ return TestMode?"TrayHelper.test.msg":"TrayHelper.msg"; } }
   internal static string HkRestoreAll="Ctrl+Alt+Up", HkSendToTray="Ctrl+Alt+Down"; internal static bool UwpVd=true;
   internal static List<AppTarget> Temps=new List<AppTarget>();
@@ -68,7 +68,7 @@ partial class TrayHelper : ApplicationContext {
 
   sealed class UiWin:NativeWindow{ readonly TrayHelper o; public UiWin(TrayHelper o){ this.o=o; }
     public void Open(){ var cp=new CreateParams(); cp.Caption=MsgCaption; cp.Parent=new IntPtr(-3); CreateHandle(cp); }
-    protected override void WndProc(ref Message m){ if(m.Msg==0x0312){ try{ o.OnHotkey(m.WParam.ToInt32()); }catch(Exception ex){ Log("hotkey "+ex.Message); } } if(m.Msg==0x8002){ try{ o.ShowSettings(); }catch(Exception ex){ Log("settings "+ex); } } if(m.Msg==0x8004){ try{ o.ExitHelper(); }catch{} } if(m.Msg==0x8003){ try{ o.ShowFlyout(); }catch(Exception ex){ Log("flyout "+ex); } } if(m.Msg==WM_HIDE){ try{ o.OnUiHide(); }catch{ o.hookFault=true; } } base.WndProc(ref m); } }
+    protected override void WndProc(ref Message m){ if(m.Msg==0x0312){ try{ o.OnHotkey(m.WParam.ToInt32()); }catch(Exception ex){ Log("hotkey "+ex.Message); } } if(m.Msg==0x8002){ try{ o.ShowSettings(); }catch(Exception ex){ Log("settings "+ex); } } if(m.Msg==0x8004){ try{ o.ExitHelper(); }catch{} } if(m.Msg==0x8005){ try{ o.ReplaceExit(null); }catch{} } if(m.Msg==0x8003){ try{ o.ShowFlyout(); }catch(Exception ex){ Log("flyout "+ex); } } if(m.Msg==WM_HIDE){ try{ o.OnUiHide(); }catch{ o.hookFault=true; } } base.WndProc(ref m); } }
 
   NotifyIcon tray; System.Windows.Forms.Timer moveTimer; WinEventProc weProc; IntPtr weHook, fgHook; System.Windows.Forms.Timer timer; UiWin ui; Icon ownedIcon;
   IntPtr uiHwnd, mHook, kHook; HookProc mProc,kProc; SynchronizationContext sync;
@@ -79,20 +79,22 @@ partial class TrayHelper : ApplicationContext {
   static bool ParseBool(string v){ v=v.ToLowerInvariant(); return v=="1"||v=="true"||v=="yes"||v=="on"; }
   static void LoadConfig(){
     if(!File.Exists(IniPath)){ Log("no ini at "+IniPath); return; }
+    string txt=File.ReadAllText(IniPath); lastSaved=txt; Apps.AddRange(ParseIni(txt.Replace("\r","").Split('\n'))); }
+  static List<AppTarget> ParseIni(string[] lines){ var Apps=new List<AppTarget>();
     AppTarget cur=null; bool inGeneral=false;
-    foreach(var raw in File.ReadAllLines(IniPath)){ var line=raw.Trim(); if(line.Length==0||line[0]==';'||line[0]=='#') continue;
+    foreach(var raw in lines){ var line=raw.Trim(); if(line.Length==0||line[0]==';'||line[0]=='#') continue;
       if(line[0]=='['){ cur=null; var s=line.Trim('[',']').Trim(); inGeneral=s.Equals("General",StringComparison.OrdinalIgnoreCase);
         if(s.StartsWith("App:",StringComparison.OrdinalIgnoreCase)){ cur=new AppTarget(); cur.Name=s.Substring(4).Trim(); cur.ProcName=cur.Name; cur.WinTitle=cur.Name; cur.WinClass="Chrome_WidgetWin_1"; Apps.Add(cur); }
         continue; }
       if(cur==null&&inGeneral){ int gi=line.IndexOf('='); if(gi<1) continue; var gk=line.Substring(0,gi).Trim().ToLowerInvariant(); var gv=line.Substring(gi+1).Trim(); int n;
-        if(gk=="hotkeyrestoreall") HkRestoreAll=gv; else if(gk=="hotkeysendtotray") HkSendToTray=gv; else if(gk=="uwpvirtualdesktop") UwpVd=ParseBool(gv); else if(gk=="exclude"){ Exclude=new List<string>(gv.Split(new[]{','},StringSplitOptions.RemoveEmptyEntries).Select(x=>x.Trim())); } else if(gk=="startdelay"&&int.TryParse(gv,out n)) StartDelay=n; else if(gk=="notifyfirsthide"||gk=="notifications") NotifyFirstHide=ParseBool(gv); else if(gk=="settingsopen") OpenMaximized=!gv.Equals("last",StringComparison.OrdinalIgnoreCase); else if(gk=="settingsbounds"){ var pp=gv.Split(','); double[] bv=new double[4]; bool ok=pp.Length>=4; for(int q=0;ok&&q<4;q++) ok=double.TryParse(pp[q],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out bv[q]); if(ok){ WinL=bv[0]; WinT=bv[1]; WinW=bv[2]; WinH=bv[3]; } if(pp.Length>=5) WinMax=pp[4]=="max"; } else if(gk=="settingssize"){ var pp=gv.Split('x'); double w,hh; if(pp.Length==2&&double.TryParse(pp[0],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out w)&&double.TryParse(pp[1],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out hh)){ WinW=w; WinH=hh; } } else if(gk=="loglevel") LogVerbose=gv.Equals("verbose",StringComparison.OrdinalIgnoreCase); else if(gk=="maxlogkb"&&int.TryParse(gv,out n)) MaxLogBytes=Math.Max(32,n)*1024L; continue; }
+        if(gk=="hotkeyrestoreall") HkRestoreAll=gv; else if(gk=="hotkeysendtotray") HkSendToTray=gv; else if(gk=="uwpvirtualdesktop") UwpVd=ParseBool(gv); else if(gk=="updates"){ var um=gv.ToLowerInvariant(); if(um=="auto"||um=="notify"||um=="off") UpdateMode=um; } else if(gk=="updaterepo"&&gv.Length>0) UpdateRepo=gv; else if(gk=="exclude"){ Exclude=new List<string>(gv.Split(new[]{','},StringSplitOptions.RemoveEmptyEntries).Select(x=>x.Trim())); } else if(gk=="startdelay"&&int.TryParse(gv,out n)) StartDelay=n; else if(gk=="notifyfirsthide"||gk=="notifications") NotifyFirstHide=ParseBool(gv); else if(gk=="settingsopen") OpenMaximized=!gv.Equals("last",StringComparison.OrdinalIgnoreCase); else if(gk=="settingsbounds"){ var pp=gv.Split(','); double[] bv=new double[4]; bool ok=pp.Length>=4; for(int q=0;ok&&q<4;q++) ok=double.TryParse(pp[q],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out bv[q]); if(ok){ WinL=bv[0]; WinT=bv[1]; WinW=bv[2]; WinH=bv[3]; } if(pp.Length>=5) WinMax=pp[4]=="max"; } else if(gk=="settingssize"){ var pp=gv.Split('x'); double w,hh; if(pp.Length==2&&double.TryParse(pp[0],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out w)&&double.TryParse(pp[1],System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out hh)){ WinW=w; WinH=hh; } } else if(gk=="loglevel") LogVerbose=gv.Equals("verbose",StringComparison.OrdinalIgnoreCase); else if(gk=="maxlogkb"&&int.TryParse(gv,out n)) MaxLogBytes=Math.Max(32,n)*1024L; continue; }
       if(cur==null) continue;
       int i=line.IndexOf('='); if(i<1) continue; var k=line.Substring(0,i).Trim().ToLowerInvariant(); var v=Environment.ExpandEnvironmentVariables(line.Substring(i+1).Trim());
-      if(k=="enabled") cur.Enabled=ParseBool(v); else if(k=="watchdog") cur.Watchdog=ParseBool(v); else if(k=="interceptctrlq") cur.CtrlQ=ParseBool(v); else if(k=="interceptctrlw") cur.CtrlW=ParseBool(v); else if(k=="order"){} else if(k=="notified") cur.Notified=ParseBool(v); else if(k=="id") cur.Id=v; else if(k=="geometric") cur.Geometric=ParseBool(v);
+      if(k=="enabled") cur.Enabled=ParseBool(v); else if(k=="watchdog") cur.Watchdog=ParseBool(v); else if(k=="interceptctrlq") cur.CtrlQ=ParseBool(v); else if(k=="interceptctrlw") cur.CtrlW=ParseBool(v); else if(k=="order"){} else if(k=="notified") cur.Notified=ParseBool(v); else if(k=="id") cur.Id=v; else if(k=="geometric") cur.Geometric=ParseBool(v); else if(k=="native"){ cur.UserNative=ParseBool(v); if(cur.UserNative) cur.Native=true; } else if(k=="nativecheck") cur.NativeDismissed=v.Equals("dismissed",StringComparison.OrdinalIgnoreCase);
       else if(k=="windowtitle") cur.WinTitle=v; else if(k=="windowclass") cur.WinClass=v;
       else if(v.Length==0) continue;
       else if(k=="exepath") cur.ExePath=v; else if(k=="processname") cur.ProcName=v; else if(k=="windowclass") cur.WinClass=v; else if(k=="windowtitle") cur.WinTitle=v; }
-  }
+    return Apps; }
   internal static void Log(string s){ try{ if(string.IsNullOrEmpty(Dir)) return; var path=Path.Combine(Dir,"tray-helper.log"); var fi=new FileInfo(path);
     if(fi.Exists&&fi.Length>MaxLogBytes){ var bak=path+".old"; try{ if(File.Exists(bak)) File.Delete(bak); File.Move(path,bak); }catch{} }
     File.AppendAllText(path,DateTime.Now.ToString("s")+" "+s+"\r\n"); }catch{} }
@@ -103,7 +105,7 @@ partial class TrayHelper : ApplicationContext {
     try{ if(SetProcessDPIAware()) dpiMode="system"; }catch(EntryPointNotFoundException){} }
 
   // ---------- ui ----------
-  TrayHelper(){
+  TrayHelper(){ Inst=this;
     tray=new NotifyIcon();
     try{ using(var st=Assembly.GetExecutingAssembly().GetManifestResourceStream("app.ico")) ownedIcon=new Icon(st,SystemInformation.SmallIconSize); }catch{}
     tray.Icon=ownedIcon??SystemIcons.Application; tray.Text=TestMode?"TrayHelper (test)":"TrayHelper";
@@ -148,7 +150,7 @@ partial class TrayHelper : ApplicationContext {
   // Startup: windows of managed apps stay hidden and are re-adopted (no popping windows); anything else is shown again.
   static void ShowRec(HiddenRec rec){ if(rec.Vd) Vd.Show(rec.H); TradShow(rec.H,rec.Ex); ShowWindow(rec.H,rec.Max?3:5); }
   // Native / disabled apps hide their own windows (Typeless, ChatGPT...): never touch those.
-  static void RecoverHidden(){ int adopted=0, shown=0, left=0; foreach(var rec in ReadHidden()){ var known=rec.Temp?null:Apps.FirstOrDefault(x=>string.Equals(x.ProcName,rec.Proc,StringComparison.OrdinalIgnoreCase));
+  static void RecoverHidden(){ int adopted=0, shown=0, left=0; foreach(var rec in ReadHidden()){ var tt=new StringBuilder(256); GetWindowText(rec.H,tt,256); var known=rec.Temp?null:Apps.Where(x=>string.Equals(x.ProcName,rec.Proc,StringComparison.OrdinalIgnoreCase)).OrderByDescending(x=>TitleOk(x,tt.ToString())).FirstOrDefault();
       var a=known!=null&&known.Enabled&&!known.Native?known:null;
       if(a!=null&&(a.hwnd==IntPtr.Zero||!IsWindow(a.hwnd)||a.hwnd==rec.H)){ a.hwnd=rec.H; a.wasMax=rec.Max; a.vd=rec.Vd; a.exSaved=rec.Ex; a.weHid=true; a.hiddenAt=DateTime.Now; adopted++; }
       else if(known!=null&&!rec.Vd){ left++; } else { ShowRec(rec); shown++; } }
@@ -165,10 +167,10 @@ partial class TrayHelper : ApplicationContext {
   internal static void SaveAll(){ try{ var sb=new StringBuilder();
     sb.AppendLine("; TrayHelper config. One [App:Name] section per app. Edited by the settings window.");
     sb.AppendLine("; ExePath may be a normal exe or shell:AppsFolder\\<AUMID> for Store/MSIX apps.");
-    sb.AppendLine(); sb.AppendLine("[General]"); sb.AppendLine("Exclude="+string.Join(",",Exclude)); sb.AppendLine("Notifications="+(NotifyFirstHide?"true":"false")); sb.AppendLine("HotkeyRestoreAll="+HkRestoreAll); sb.AppendLine("HotkeySendToTray="+HkSendToTray); sb.AppendLine("UwpVirtualDesktop="+(UwpVd?"true":"false")); sb.AppendLine("SettingsOpen="+(OpenMaximized?"maximized":"last")); if(WinW>0&&!double.IsNaN(WinL)) sb.AppendLine("SettingsBounds="+(int)WinL+","+(int)WinT+","+(int)WinW+","+(int)WinH+","+(WinMax?"max":"normal"));
-    foreach(var a in Apps){ sb.AppendLine(); sb.AppendLine("[App:"+a.Name+"]"); if(a.Id!=null) sb.AppendLine("Id="+a.Id); if(a.CtrlQ) sb.AppendLine("InterceptCtrlQ=true"); if(a.CtrlW) sb.AppendLine("InterceptCtrlW=true"); if(a.Notified) sb.AppendLine("Notified=true"); if(a.Geometric) sb.AppendLine("Geometric=true"); sb.AppendLine("Enabled="+(a.Enabled?"true":"false"));
+    sb.AppendLine(); sb.AppendLine("[General]"); sb.AppendLine("Exclude="+string.Join(",",Exclude)); sb.AppendLine("Notifications="+(NotifyFirstHide?"true":"false")); sb.AppendLine("HotkeyRestoreAll="+HkRestoreAll); sb.AppendLine("HotkeySendToTray="+HkSendToTray); sb.AppendLine("UwpVirtualDesktop="+(UwpVd?"true":"false")); sb.AppendLine("Updates="+UpdateMode); sb.AppendLine("UpdateRepo="+UpdateRepo); sb.AppendLine("SettingsOpen="+(OpenMaximized?"maximized":"last")); if(WinW>0&&!double.IsNaN(WinL)) sb.AppendLine("SettingsBounds="+(int)WinL+","+(int)WinT+","+(int)WinW+","+(int)WinH+","+(WinMax?"max":"normal"));
+    foreach(var a in Apps){ sb.AppendLine(); sb.AppendLine("[App:"+a.Name+"]"); if(a.Id!=null) sb.AppendLine("Id="+a.Id); if(a.CtrlQ) sb.AppendLine("InterceptCtrlQ=true"); if(a.CtrlW) sb.AppendLine("InterceptCtrlW=true"); if(a.Notified) sb.AppendLine("Notified=true"); if(a.Geometric) sb.AppendLine("Geometric=true"); if(a.UserNative) sb.AppendLine("Native=true"); if(a.NativeDismissed) sb.AppendLine("NativeCheck=dismissed"); sb.AppendLine("Enabled="+(a.Enabled?"true":"false"));
       sb.AppendLine("ExePath="+(a.ExePath??"")); sb.AppendLine("ProcessName="+a.ProcName); sb.AppendLine("WindowClass="+a.WinClass); sb.AppendLine("WindowTitle="+a.WinTitle); }
-    File.WriteAllText(IniPath,sb.ToString()); }catch(Exception ex){ Log("save ini "+ex.Message); } }
+    var txt=sb.ToString(); lastSaved=txt; File.WriteAllText(IniPath,txt); }catch(Exception ex){ Log("save ini "+ex.Message); } }
   // ---------- window tracking ----------
     // Patterns: "a|b" = any of; "*x" = contains x; "x*" = starts with x; else exact. Empty = anything.
   static bool PatOk(string pat,string v,bool emptyNeedsText){ if(string.IsNullOrEmpty(pat)) return !emptyNeedsText||v.Length>0;
@@ -212,7 +214,7 @@ partial class TrayHelper : ApplicationContext {
   void Tick(){
     if(exiting||inTick) return; inTick=true; var sw=Stopwatch.StartNew();
     try{
-      if(!booted){ booted=true; try{ ui=new UiWin(this); ui.Open(); uiHwnd=ui.Handle; ApplyHotkeys(); }catch(Exception ex){ Log("ui "+ex.Message); } sync=SynchronizationContext.Current; try{ weHook=SetWinEventHook(0x800B,0x800B,IntPtr.Zero,weProc,0,0,0); fgHook=SetWinEventHook(0x0003,0x0003,IntPtr.Zero,weProc,0,0,0); }catch{} Log("started dpi="+dpiMode+" apps="+Apps.Count+" hooks: mouse="+(mHook!=IntPtr.Zero)+" key="+(kHook!=IntPtr.Zero));  }
+      if(!booted){ booted=true; try{ ui=new UiWin(this); ui.Open(); uiHwnd=ui.Handle; ApplyHotkeys(); }catch(Exception ex){ Log("ui "+ex.Message); } sync=SynchronizationContext.Current; try{ weHook=SetWinEventHook(0x800B,0x800B,IntPtr.Zero,weProc,0,0,0); fgHook=SetWinEventHook(0x0003,0x0003,IntPtr.Zero,weProc,0,0,0); }catch{} StartIniWatch(); StartUpdater(); TestUpdateArg(); Log("started v"+Version+" dpi="+dpiMode+" apps="+Apps.Count+" hooks: mouse="+(mHook!=IntPtr.Zero)+" key="+(kHook!=IntPtr.Zero));  }
       EnsureHooks();
       foreach(var a in Apps) TickApp(a); TickTemps();
       snapApps=Apps.ToArray();
@@ -222,7 +224,7 @@ partial class TrayHelper : ApplicationContext {
     }catch(Exception ex){ Log("tick "+ex.Message); hooksSuspect=true; }
     finally{ inTick=false; } }
   void TickApp(AppTarget a){
-    if(a.hwnd==IntPtr.Zero||!IsWindow(a.hwnd)){ var h=FindMain(a); if(h!=a.hwnd){ a.hwnd=h; a.weHid=false; a.vd=false; if(h==IntPtr.Zero) a.snap=null; else HoldProc(a); Log(a.Name+": attached hwnd="+h); } }
+    if(a.hwnd==IntPtr.Zero||!IsWindow(a.hwnd)){ var h=FindMain(a); if(h!=a.hwnd){ a.hwnd=h; a.weHid=false; a.vd=false; if(h==IntPtr.Zero) a.snap=null; else{ HoldProc(a); HealExe(a,h); } Log(a.Name+": attached hwnd="+h); } }
     bool running=a.hwnd!=IntPtr.Zero; if(running&&a.vd&&Vd.OnCurrent(a.hwnd)) a.vd=false; if(running&&a.weHid&&!a.vd&&IsWindowVisible(a.hwnd)) a.weHid=false; // brought back by hand (Task View)
     if(running){ a.seenRunning=true; a.goneSince=DateTime.MaxValue; if(a.userQuit&&a.quitSawGone&&IsWindowVisible(a.hwnd)){ a.userQuit=false; a.quitSawGone=false; } }
     else{ if(a.goneSince==DateTime.MaxValue&&a.seenRunning){ a.goneSince=DateTime.Now; CheckCleanExit(a); } if(a.userQuit) a.quitSawGone=true; }
@@ -268,6 +270,7 @@ partial class TrayHelper : ApplicationContext {
       int vEnd=Math.Max(hY+bh+fy+pad,rc.t+(int)(64*dpi/96)), vp=0; for(int yy=hY;yy<vEnd;yy+=step){ if(++vp>24||sw.ElapsedMilliseconds>=60||!Fits16(mid)||!Fits16(yy)) break; if(Hit(h,mid,yy)==20) btm=yy; else break; }
       a.aL=rc.l; a.aT=rc.t; a.aR=rc.r; a.aB=rc.b; Publish(a,hL-2,rc.t,rc.r,btm+3); return; }
     if(a.Geometric||Office(a)||sawFit){ RECT vf; if(DwmGetWindowAttribute(h,9,out vf,Marshal.SizeOf(typeof(RECT)))!=0) vf=rc; bool z=IsZoomed(h); int gw=(int)(46*dpi/96), gh=(int)((Office(a)?40:32)*dpi/96), top=z?Math.Max(vf.t,0):vf.t;
+      RECT cb; if(!Office(a)&&DwmGetWindowAttribute(h,5,out cb,Marshal.SizeOf(typeof(RECT)))==0){ int ch=cb.b-cb.t, cw=cb.r-cb.l; if(ch>=(int)(24*dpi/96)&&ch<=(int)(56*dpi/96)&&cw>=ch){ gh=ch; gw=Math.Max(gw,Math.Min(cw/3,(int)(64*dpi/96))); } } // DWM's own caption-button size
       if(z){ top=Math.Max(vf.t,MonLeftTop(h,false)); }
       a.aL=rc.l; a.aT=rc.t; a.aR=rc.r; a.aB=rc.b; if(LogVerbose||!a.geoLogged){ a.geoLogged=true; Log(a.Name+": no HTCLOSE from hit-test, using caption geometry"); } Publish(a,vf.r-gw,top,vf.r,top+gh); return; }
     if(false){ int gw=(int)(46*dpi/96), gh=(int)(32*dpi/96), top=Math.Max(rc.t,rc.t+fy+pad-(IsZoomed(h)?fy+pad:0)); a.aL=rc.l; a.aT=rc.t; a.aR=rc.r; a.aB=rc.b; Publish(a,rc.r-gw-(IsZoomed(h)?fx+pad:0),rc.t,rc.r,top+gh+(IsZoomed(h)?fy+pad:0)); return; }
@@ -350,9 +353,9 @@ partial class TrayHelper : ApplicationContext {
     var c=new StringBuilder(256); GetClassName(h,c,256); var cls=c.ToString(); if(cls=="Shell_TrayWnd"||cls=="Shell_SecondaryTrayWnd"||cls=="Progman"||cls=="WorkerW"||cls=="Windows.UI.Core.CoreWindow") return;
     var m=Apps.FirstOrDefault(x=>x.hwnd==h&&x.Running); if(m!=null){ Hide_(m); Log(m.Name+": hid (shortcut)"); return; }
     if(Temps.Any(x=>x.hwnd==h)) return;
-    var t=new StringBuilder(256); GetWindowText(h,t,256); string pn=null; try{ using(var p=Process.GetProcessById((int)pid)) pn=p.ProcessName; }catch{} var exe=ExeOf(pid);
+    var t=new StringBuilder(256); GetWindowText(h,t,256); string pn=null; try{ using(var p=Process.GetProcessById((int)pid)) pn=p.ProcessName; }catch{} var exe=ExeOf(pid); if(Pkg.IsFrameHostExe(exe)){ try{ var pi=Pkg.OfWindow(h); if(pi!=null&&(pi.Logo??pi.Exe)!=null) exe=pi.Logo??pi.Exe; }catch{} }
     var a=new AppTarget(); a.Temp=true; a.hwnd=h; a.ProcName=pn??""; a.IconExe=exe; a.Enabled=true; a.Preset=false; a.Detected=true; a.seenRunning=true; a.Name=t.Length>0?t.ToString():(pn??"Window");
-    Temps.Add(a); HideWin(a,h); if(!a.vd&&IsWindowVisible(h)){ Temps.Remove(a); Log(a.Name+": could not hide (shortcut)"); return; } a.hiddenAt=DateTime.Now; SyncAppTray(a,true); Log(a.Name+": sent to tray (shortcut)"); }
+    Temps.Add(a); HideWin(a,h); if(!a.vd&&IsWindowVisible(h)){ Temps.Remove(a); Log(a.Name+": could not hide (shortcut)"); return; } a.hiddenAt=DateTime.Now; SyncAppTray(a,true); Log(a.Name+": sent to tray (shortcut)"+(exe!=null&&exe.EndsWith(".png",StringComparison.OrdinalIgnoreCase)?", Store logo icon":"")); }
   void TickTemps(){ foreach(var a in Temps.ToArray()){ bool alive=a.hwnd!=IntPtr.Zero&&IsWindow(a.hwnd); if(alive&&a.vd&&Vd.OnCurrent(a.hwnd)) a.vd=false;
       if(!alive||!a.Hidden){ Temps.Remove(a); if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } SaveHidden(); } } }
   // ---------- tray icons: exe icon, solid background made transparent, sized for the current DPI ----------
@@ -370,7 +373,7 @@ partial class TrayHelper : ApplicationContext {
     bool want=running&&a.Enabled&&!a.Native&&!a.NativeTray&&!exiting;
     if(!want){ if(a.Tray!=null){ a.Tray.Visible=false; a.Tray.Dispose(); a.Tray=null; } return; }
     if(a.Tray!=null) return;
-    if(a.TrayIcon==null){ try{ if(a.IconExe!=null) a.TrayIcon=CleanIcon(Icon.ExtractAssociatedIcon(a.IconExe)); }catch{} }
+    if(a.TrayIcon==null){ try{ if(a.IconExe!=null) a.TrayIcon=LoadIcon(a.IconExe); }catch{} }
     var t=new NotifyIcon(); t.Icon=a.TrayIcon??ownedIcon??SystemIcons.Application; t.Text=a.Name.Length>63?a.Name.Substring(0,63):a.Name;
     t.MouseUp+=(s,e)=>{ if(e.Button==MouseButtons.Right) ShowAppMenu(a); else if(e.Button==MouseButtons.Middle&&!a.IsGrok) QuitApp(a); }; // Grok Bot is the remote channel: never quit by a stray middle click
     t.MouseClick+=(s,e)=>{ if(e.Button!=MouseButtons.Left) return; if(a.Hidden) ShowApp(a); else if(a.Running){ HideWin(a,a.hwnd); a.snap=null; a.hiddenAt=DateTime.Now; Log(a.Name+": hid (tray click)"); } };
@@ -403,8 +406,11 @@ partial class TrayHelper : ApplicationContext {
     if(string.IsNullOrEmpty(Dir)) Dir=Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
     IniPath=Path.Combine(Dir,"tray-helper.ini"); TestMode=Environment.CommandLine.Contains("--test"); // isolated instance: own mutex, no catalog, no autostart
     if(Environment.CommandLine.Contains("--scan")){ LoadConfig(); try{ Catalog.Merge(Apps); }catch{} Scanner.WriteReport(Path.Combine(Dir,"scan.txt")); return; }
-    bool created; var mx=new Mutex(true,TestMode?"Local\\TrayHelper.test":"Local\\TrayHelper",out created); if(!created){ mx.Dispose(); var w=FindWindowEx(new IntPtr(-3),IntPtr.Zero,null,MsgCaption); if(w!=IntPtr.Zero) PostMessage(w,Environment.CommandLine.Contains("--flyout")?0x8003u:0x8002u,IntPtr.Zero,IntPtr.Zero); return; } // 2nd launch opens settings
-    LoadConfig(); if(!TestMode){ try{ Catalog.Merge(Apps); }catch(Exception ex){ Log("catalog "+ex.Message); } } SaveAll(); RecoverHidden();
+    if(Environment.CommandLine.Contains("--check-update")){ LoadConfig(); CheckUpdate(true); Log("update check: "+UpdateStatus+" latest="+(UpdateTag??"-")+" repo="+UpdateRepo); return; } // no UI, no mutex
+    bool created; var mx=new Mutex(true,TestMode?"Local\\TrayHelper.test":"Local\\TrayHelper",out created);
+    if(!created&&Environment.CommandLine.Contains("--replace")){ try{ created=mx.WaitOne(15000); }catch(AbandonedMutexException){ created=true; } } // update/setup handover: wait for the old instance to leave
+    if(!created){ mx.Dispose(); var w=FindWindowEx(new IntPtr(-3),IntPtr.Zero,null,MsgCaption); if(w!=IntPtr.Zero) PostMessage(w,Environment.CommandLine.Contains("--flyout")?0x8003u:0x8002u,IntPtr.Zero,IntPtr.Zero); return; } // 2nd launch opens settings
+    LoadConfig(); try{ if(TestMode) Catalog.Apply(Apps,new List<Catalog.Found>()); else Catalog.Merge(Apps); }catch(Exception ex){ Log("catalog "+ex.Message); } SaveAll(); RecoverHidden();
     AppDomain.CurrentDomain.UnhandledException+=delegate(object s,UnhandledExceptionEventArgs e){ try{ Log("fatal "+e.ExceptionObject); RestoreAllHidden(); }catch{} };
     try{ var mark=Path.Combine(Dir,"autostart.init"); if(!TestMode&&!File.Exists(mark)){ StartWithWindows=true; File.WriteAllText(mark,DateTime.Now.ToString("s")); } }catch{}
     try{ Application.EnableVisualStyles(); Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);

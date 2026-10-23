@@ -5,9 +5,9 @@ $TD = Join-Path $env:TEMP ('th-test-' + [DateTime]::Now.ToString('HHmmss')); $he
 . (Join-Path $here 'lib.ps1')
 $old = [H]::FindWindowEx([IntPtr](-3), [IntPtr]::Zero, [NullString]::Value, 'TrayHelper.test.msg'); if ($old -ne [IntPtr]::Zero) { [H]::PostMessage($old, 0x8004, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null; Start-Sleep 2 }
 Get-Process TrayHelper -ErrorAction SilentlyContinue | ? { $_.Path -like "$env:TEMP\th-test*" } | % { try { $_.Kill() } catch {} }
-Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | ? { $_.CommandLine -like '*thtest\win.ps1*' } | % { Stop-Process -Id $_.ProcessId -Force }
+Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | ? { $_.CommandLine -like '*win.ps1*-Title TH-*' } | % { Stop-Process -Id $_.ProcessId -Force }
 Start-Sleep 1.5; Remove-Item $TD -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory $TD | Out-Null
-$src = (Join-Path (Split-Path -Parent $PSScriptRoot) 'dist')
+$src = if($env:TH_SRC){$env:TH_SRC}else{(Join-Path (Split-Path -Parent $PSScriptRoot) 'dist')}
 Copy-Item "$src\TrayHelper.exe","$src\VirtualDesktopAccessor.dll" $TD
 @"
 [General]
@@ -102,5 +102,5 @@ if (-not $calcWasRunning -and $wc -ne [IntPtr]::Zero) { [H]::PostMessage($wc, 0x
 
 # cleanup
 $mw = [H]::FindWindowEx([IntPtr](-3), [IntPtr]::Zero, [NullString]::Value, 'TrayHelper.test.msg'); [H]::PostMessage($mw, 0x8004, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null; Start-Sleep 1.5
-Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | ? { $_.CommandLine -like '*thtest\win.ps1*' } | % { Stop-Process -Id $_.ProcessId -Force }
+Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | ? { $_.CommandLine -like '*win.ps1*-Title TH-*' } | % { Stop-Process -Id $_.ProcessId -Force }
 $script:results; '--- test log ---'; Get-Content "$TD\tray-helper.log" | Select-Object -Last 30

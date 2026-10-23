@@ -27,6 +27,7 @@ static class Scanner{
       string pn=null; try{ using(var p=Process.GetProcessById((int)pid)) pn=p.ProcessName; }catch{} if(pn==null||excl.Contains(pn)) return true;
       var t=new StringBuilder(256); GetWindowText(h,t,256); string exe=null, aumid=null; var ph=OpenProcess(0x1000,false,pid);
       if(ph!=IntPtr.Zero){ try{ var sb=new StringBuilder(1024); int n=sb.Capacity; if(QueryFullProcessImageName(ph,0,sb,ref n)) exe=sb.ToString(); var sa=new StringBuilder(256); int na=sa.Capacity; try{ if(GetApplicationUserModelId(ph,ref na,sa)==0) aumid=sa.ToString(); }catch(EntryPointNotFoundException){} }finally{ CloseHandle(ph); } }
+      if(pn.Equals("ApplicationFrameHost",StringComparison.OrdinalIgnoreCase)){ try{ var pi=Pkg.OfWindow(h); if(pi!=null&&pi.Aumid!=null){ aumid=pi.Aumid; exe=pi.Logo??pi.Exe; } }catch{} }
       res.Add(new Win{ H=h, Title=t.ToString(), Proc=pn, Cls=cls, Exe=exe, Aumid=aumid }); return true; },IntPtr.Zero); return res; }
   [DllImport("dwmapi")] static extern int DwmGetWindowAttribute(IntPtr h,int a,out int v,int s);
   [DllImport("kernel32")] static extern IntPtr OpenProcess(uint a,bool i,uint pid);
@@ -63,11 +64,12 @@ static class Scanner{
         if(nativeProcs.Contains(pn)){ excludedLog.Add(pn+": natively supported (built-in list)"); return true; } if(tray.Contains(pn)){ excludedLog.Add(pn+": has its own tray icon (NotifyIconSettings)"); return true; } }
       string exe=null, aumid=null; var ph=OpenProcess(0x1000,false,pid);
       if(ph!=IntPtr.Zero){ try{ var sb=new StringBuilder(1024); int n=sb.Capacity; if(QueryFullProcessImageName(ph,0,sb,ref n)) exe=sb.ToString(); var sa=new StringBuilder(256); int na=sa.Capacity; try{ if(GetApplicationUserModelId(ph,ref na,sa)==0) aumid=sa.ToString(); }catch(EntryPointNotFoundException){} }finally{ CloseHandle(ph); } }
+      string icon=exe; if(uwp){ try{ var pi=Pkg.OfWindow(h); if(pi!=null&&pi.Aumid!=null){ aumid=pi.Aumid; icon=pi.Logo??pi.Exe; } }catch{} }
       bool elev=!selfAdmin&&Elevated(pid);
-      var a=new AppTarget(); a.ProcName=pn; a.WinClass=cls; a.WinTitle=uwp?t.ToString():""; a.ExePath=aumid!=null?@"shell:AppsFolder\"+aumid:exe; a.IconExe=exe; a.Enabled=true; a.Preset=false; a.Detected=true;
+      var a=new AppTarget(); a.ProcName=pn; a.WinClass=cls; a.WinTitle=uwp?t.ToString():""; a.ExePath=aumid!=null?@"shell:AppsFolder\"+aumid:exe; a.IconExe=icon; a.Enabled=true; a.Preset=false; a.Detected=true;
       string nm; if(!Known.TryGetValue(pn,out nm)){ nm=null; try{ if(exe!=null){ var vi=FileVersionInfo.GetVersionInfo(exe); nm=!string.IsNullOrEmpty(vi.FileDescription)?vi.FileDescription:vi.ProductName; } }catch{} } if(uwp) nm=t.ToString(); a.Name=string.IsNullOrEmpty(nm)?pn:nm;
-      a.Note=elev?"needs TrayHelper run as admin (app is elevated)":uwp?"Store/UWP window, hiding may be unreliable":null;
-      res.Add(new Cand{ App=a, Suggest=!elev&&!uwp }); return true; },IntPtr.Zero);
+      bool vdOff=uwp&&!(TrayHelper.UwpVd&&Vd.Ok); a.Note=elev?"needs TrayHelper run as admin (app is elevated)":vdOff?"Store app: turn on \"Hide Store apps on a hidden desktop\"":null;
+      res.Add(new Cand{ App=a, Suggest=!elev&&!vdOff }); return true; },IntPtr.Zero);
     return res; }
   public static void WriteReport(string path){ var ex=new List<string>(); var r=Scan(ex); var sb=new StringBuilder();
     sb.AppendLine("Would list:"); foreach(var c in r) sb.AppendLine("  "+(c.Suggest?"[x] ":"[ ] ")+c.App.Name+"  ("+c.App.ProcName+", "+c.App.WinClass+")"+(c.App.Note!=null?"  - "+c.App.Note:""));

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0
+- TrayHelper-Setup.exe: one-file per-user installer and uninstaller (keeps settings, hands hidden windows over to the new version)
+- Updates from GitHub Releases: Auto / Notify / Off; SHA-256 verified, keeps the previous version for rollback, no popups
+- Store apps hidden with the shortcut show their own logo in the tray
+- Launch paths fix themselves: blank paths are filled in from the running app, and Store paths survive package updates
+- Apps that turn out to have their own tray icon get a "Use built-in" option that retires TrayHelper's toggle
+- Edits to tray-helper.ini apply immediately, without a restart
+- Better X detection for custom title bars (uses Windows' own caption-button size)
+- Fix: Store apps added from the window list could launch the frame host instead of the app, and matched any Store window
+- README in English and Traditional Chinese
+
 ## 0.7.2
 - Fix: apps that hide their own window (Typeless, ChatGPT…) could pop up after a TrayHelper restart or Exit; TrayHelper now only restores windows it hid itself
 - Fix: Store apps hidden on the hidden desktop could still show a taskbar button when the taskbar shows windows from all desktops

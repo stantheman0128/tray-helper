@@ -1,33 +1,24 @@
 # TrayHelper Roadmap
 
-Current stage: **MVP** (speed over polish). Grok CLI will handle the hardening, packaging and test passes later.
+Current stage: **MVP** (speed over polish).
+
+## Done in 0.8.0
+- ~~Packaged installer~~: `TrayHelper-Setup.exe` (per-user, upgrade in place, migrates a running copy, Start menu + Apps & features entry, `--uninstall`). The 0.7.1 scripts in `installer\` still work.
+- ~~README (EN + zh-TW)~~.
+- ~~Store/MSIX ExePath auto-detect~~: blank or broken paths are filled in from the running window, and `...\WindowsApps\Pkg_<version>...` paths become the version-independent `shell:AppsFolder\<AUMID>`.
+- ~~Geometric caption-button fallback~~ (since 0.5.0, refined with DWM's caption-button size in 0.8.0; force it with `Geometric=true`).
+- ~~Background auto-update~~: GitHub Releases, Auto / Notify / Off, SHA-256 verified, the old exe is kept as `TrayHelper.old.exe`, and hidden windows are handed over. **Needs public releases**: the repo is private, so the check finds nothing until releases are public (or `UpdateRepo` points to a public releases repo).
+- ~~Native close-to-tray detection~~: a managed app that owns a tray icon (NotifyIconSettings, minus apps known to still quit on X) gets a "Has its own tray icon · Use built-in" suggestion, with no popups. "Use TrayHelper" switches it back.
+- ~~Live reload when the ini is edited by hand~~.
 
 ## Next
-- ~~Crash-loop backoff~~ (done: max 3 relaunches in 5 min, exponential delay).
-- ~~**Installer / uninstaller**~~ (done 0.7.1: installer\\install.ps1 / uninstall.ps1; a packaged setup.exe is still open): copy to `%LOCALAPPDATA%\TrayHelper`, add a Startup shortcut, migrate the old `GrokBotTray` ini, and remove GrokBotTray.
-- **README (EN + zh-TW)**: what it does, screenshots, presets, FAQ (elevated apps, UWP limits).
-- **Store/MSIX ExePath auto-detect**: the picker already resolves the AUMID (`shell:AppsFolder\<AUMID>`). Also resolve it for hand-written entries and when a package version changes.
-- A fallback for apps with custom title bars that ignore `WM_NCHITTEST` (geometric caption-button mode).
+- Code signing: script ready (`installer\sign.ps1`); needs a certificate. Sign both exes before publishing releases.
+- Hosted known-apps manifest (app → first version with native tray support → where the setting is), so native detection doesn't rely on the tray-icon heuristic alone.
+- Demo GIF (`assets/demo.gif`, shown on the About page). Not recorded, to avoid capturing private screens.
 
-## Background auto-update of TrayHelper
-- Check GitHub Releases daily for a newer signed build.
-- Download it next to the current exe, verify the hash/signature, swap it on the next helper restart (or at idle), and keep one rollback copy.
-- Add a setting: auto / notify only / off.
-
-## Native close-to-tray detection (retire our toggle when the vendor ships one)
-- Run a periodic check (weekly, plus after the app updates) for each managed app.
-  - Use a known-apps manifest (hosted JSON) that maps app → first version with native tray/background support → where the setting lives (e.g. "Settings → General → Keep running in background").
-  - Local heuristics: does the app's process own a notification-area icon? Does closing still keep the process alive?
-- When native support is detected, mark the app "Native support available". Disable our hook for it (after asking the user), show a one-click guide that opens the official setting, and stop offering our toggle.
-- Watch candidates: Grok Bot, Claude Desktop, OpenCode, Hermes Agent, Obsidian.
-
-## Later
-- Live reload when the ini is edited by hand.
-- Code signing: script ready (installer\sign.ps1, 0.7.1); needs a certificate.
-
-## Notes (MVP 0.4)
-- Keyboard interception: Alt+F4 is always intercepted for apps with close-to-tray on. Ctrl+Q / Ctrl+W are intercepted only when the app's main window is in the foreground, and only when enabled per app with `InterceptCtrlQ=true` / `InterceptCtrlW=true` in the ini. Defaults: Ctrl+Q is on for Thunderbird (where it quits the app). Ctrl+W is off everywhere, because in most apps it closes a tab, not the window.
-- Close-button geometry is recalculated whenever a managed window moves or resizes (WinEvent LOCATIONCHANGE, 60 ms debounce), and every second as a backstop, so it works when maximized, restored, on any monitor and at any DPI.
-- The watchdog only runs, silently, for Grok Bot (the remote-access path). No other app is auto-restarted.
-- Add all open windows: the exclusion list is editable (stored as `Exclude=` in `[General]`). Elevated apps are flagged "needs TrayHelper run as admin". UWP windows (ApplicationFrameHost) are flagged as unreliable.
-- TODO: record a demo GIF to `assets/demo.gif` (the About page shows it when present).
+## Notes
+- Keyboard interception: Alt+F4 is always intercepted for apps with close-to-tray on. Ctrl+Q / Ctrl+W are intercepted only when the app's main window is in the foreground, and only when enabled per app (`InterceptCtrlQ=true` / `InterceptCtrlW=true`). Ctrl+Q is on by default for Thunderbird.
+- Close-button geometry is recalculated whenever a managed window moves or resizes (WinEvent LOCATIONCHANGE, 60 ms debounce), and every second as a backstop.
+- The watchdog only runs, silently, for Grok Bot. No other app is auto-restarted.
+- Store / UWP windows (ApplicationFrameHost) are hidden on a separate hidden desktop ("TrayHelper"), which is removed when empty. Their taskbar button is dropped too, for taskbars that show all desktops. If the virtual-desktop helper isn't available, Add all open windows leaves Store apps unticked.
+- Elevated apps are flagged "needs TrayHelper run as admin".

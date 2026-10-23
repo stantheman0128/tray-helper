@@ -75,6 +75,7 @@ static class Theme{
   public static ImageSource AppIcon(string exe){
     if(string.IsNullOrEmpty(exe)) return Logo;
     ImageSource s; if(iconCache.TryGetValue(exe,out s)) return s;
+    if(exe.EndsWith(".png",StringComparison.OrdinalIgnoreCase)){ try{ var bi=new BitmapImage(); bi.BeginInit(); bi.UriSource=new Uri(exe); bi.CacheOption=BitmapCacheOption.OnLoad; bi.DecodePixelWidth=64; bi.EndInit(); bi.Freeze(); s=bi; }catch{ s=Logo; } iconCache[exe]=s; return s; } // Store app logo
     try{ using(var ic=System.Drawing.Icon.ExtractAssociatedIcon(exe)){ s=Imaging.CreateBitmapSourceFromHIcon(ic.Handle,Int32Rect.Empty,BitmapSizeOptions.FromEmptyOptions()); s.Freeze(); } }catch{ s=Logo; }
     iconCache[exe]=s; return s; }
   static ImageSource logo;
@@ -180,6 +181,7 @@ partial class TrayHelper{
     var foot=new DockPanel(); foot.Margin=new Thickness(0,8,0,0);
     var exit=Theme.MkBtn(Theme.T("Exit",12.5,Theme.Sub,FontWeights.Normal),"Link"); exit.ToolTip="Exit TrayHelper (hidden windows are restored)"; exit.Click+=(s,e)=>{ flyout.Hide(); ExitHelper(); }; DockPanel.SetDock(exit,Dock.Right); foot.Children.Add(exit);
     var more=Theme.MkBtn(Theme.T("Open settings",12.5,Theme.Accent,FontWeights.Normal),"Link"); more.Click+=(s,e)=>{ flyout.Hide(); ShowSettings(); }; more.HorizontalAlignment=HorizontalAlignment.Left; foot.Children.Add(more);
+    if(UpdateTag!=null){ var ul=Theme.MkBtn(Theme.T("Update to v"+UpdateTag,12.5,Theme.Accent,FontWeights.Normal),"Link"); ul.Click+=(s,e)=>{ flyout.Hide(); InstallUpdate(); }; DockPanel.SetDock(ul,Dock.Right); foot.Children.Insert(0,ul); }
     st.Children.Add(foot);
     flyout.Content=outer;
     flyout.Show(); PlaceFlyout(); flyout.Activate();
@@ -262,7 +264,7 @@ sealed class SettingsWindow:Window{
       var sw=Labeled("Start with Windows",TrayHelper.StartWithWindows,v=>TrayHelper.StartWithWindows=v); Grid.SetColumn(sw,2); g.Children.Add(sw); st.Children.Add(Card(g)); }
     var all=TrayHelper.Apps.Where(x=>x.Detected||!x.Preset).ToList();
     var managed=all.Where(x=>!x.Native).ToList(); var native=all.Where(x=>x.Native).ToList();
-    var mpanel=new StackPanel(); st.Children.Add(mpanel);
+    var mpanel=new StackPanel(); st.Children.Add(mpanel); HashSet<string> owners; try{ owners=Scanner.TrayOwners(); }catch{ owners=new HashSet<string>(); }
     foreach(var a0 in managed){ var a=a0;
       var outerG=new Grid(); outerG.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto}); outerG.ColumnDefinitions.Add(new ColumnDefinition());
       var gripA=Theme.Grip(); outerG.Children.Add(gripA);
@@ -271,6 +273,9 @@ sealed class SettingsWindow:Window{
       var tx=new StackPanel(); tx.Margin=new Thickness(14,0,12,0); tx.VerticalAlignment=VerticalAlignment.Center;
       tx.Children.Add(Theme.NameLine(a,14)); var stt=Theme.T(Theme.StatusText(a),12,Theme.Sub,FontWeights.Normal); statusLabels[a]=stt; tx.Children.Add(stt);
       Grid.SetColumn(tx,1); g.Children.Add(tx);
+      if(TrayHelper.SuggestNative(a,owners)){ var nb=new StackPanel(); nb.Orientation=Orientation.Horizontal; nb.Margin=new Thickness(0,4,0,0); var bdg=Theme.Badge("Has its own tray icon"); bdg.Margin=new Thickness(0,0,6,0); nb.Children.Add(bdg);
+        var use=Theme.MkBtn(Theme.T("Use built-in",12,Theme.Accent,FontWeights.Normal),"Link"); use.ToolTip="Turn off TrayHelper for "+a.Name+" and open it, so you can switch on its own close-to-tray option"; use.Click+=(s,e)=>{ th.UseNative(a); Rebuild(); }; nb.Children.Add(use);
+        var dis=Theme.MkBtn(Theme.Glyph("\uE711",10,Theme.Sub),"Link"); dis.ToolTip="Keep using TrayHelper"; dis.Click+=(s,e)=>{ th.DismissNative(a); Rebuild(); }; nb.Children.Add(dis); tx.Children.Add(nb); }
       var show=Theme.MkBtn("Show","Btn"); show.Click+=(s,e)=>th.Show_(a); show.Margin=new Thickness(0,0,16,0); Grid.SetColumn(show,2); g.Children.Add(show);
 
       var ct=Labeled("Close to tray",a.Enabled,v=>th.SetEnabled(a,v)); Grid.SetColumn(ct,4); g.Children.Add(ct);
@@ -283,8 +288,10 @@ sealed class SettingsWindow:Window{
         var g=new Grid(); foreach(var w in new[]{GridLength.Auto,GridLength.Auto,new GridLength(1,GridUnitType.Star),GridLength.Auto}) g.ColumnDefinitions.Add(new ColumnDefinition{Width=w});
         var gripN=Theme.Grip(); g.Children.Add(gripN); var nic=Theme.Img(Theme.AppIcon(a.IconExe),32); Grid.SetColumn(nic,1); g.Children.Add(nic);
         var tx=new StackPanel(); tx.Margin=new Thickness(14,0,12,0); tx.VerticalAlignment=VerticalAlignment.Center; tx.Children.Add(Theme.NameLine(a,14));
-        var hint=Theme.T(a.Hint??"Option is in app settings",12,Theme.Sub,FontWeights.Normal); hint.TextWrapping=TextWrapping.Wrap; tx.Children.Add(hint); Grid.SetColumn(tx,2); g.Children.Add(tx);
-        var ob=Theme.MkBtn("Open settings","Btn"); ob.Click+=(s,e)=>th.OpenAppSettings(a); Grid.SetColumn(ob,3); g.Children.Add(ob);
+        var hint=Theme.T(a.Hint??(a.UserNative?"Uses its own close-to-tray":"Option is in app settings"),12,Theme.Sub,FontWeights.Normal); hint.TextWrapping=TextWrapping.Wrap; tx.Children.Add(hint); Grid.SetColumn(tx,2); g.Children.Add(tx);
+        var obp=new StackPanel(); obp.Orientation=Orientation.Horizontal; obp.VerticalAlignment=VerticalAlignment.Center;
+        if(a.UserNative){ var back=Theme.MkBtn(Theme.T("Use TrayHelper",12.5,Theme.Accent,FontWeights.Normal),"Link"); back.Margin=new Thickness(0,0,8,0); back.Click+=(s,e)=>{ th.UseOurs(a); Rebuild(); }; obp.Children.Add(back); }
+        var ob=Theme.MkBtn("Open settings","Btn"); ob.Click+=(s,e)=>th.OpenAppSettings(a); obp.Children.Add(ob); Grid.SetColumn(obp,3); g.Children.Add(obp);
         var nc=Card(g); nc.Tag=a; Theme.Reorderable(npanel,nc,gripN,order=>th.ApplyOrder(order)); npanel.Children.Add(nc); } }
     return st; }
   static StackPanel Labeled(string label,bool on,Action<bool> set){ var sp=new StackPanel(); sp.Orientation=Orientation.Horizontal; sp.VerticalAlignment=VerticalAlignment.Center;
@@ -296,19 +303,29 @@ sealed class SettingsWindow:Window{
     st.Children.Add(Row("Send window to tray",null,Theme.HotkeyBox(TrayHelper.HkSendToTray,v=>{ TrayHelper.HkSendToTray=v; TrayHelper.SaveAll(); th.ApplyHotkeys(); bool ok; return !th.HotkeyOk.TryGetValue(2,out ok)||ok; },r=>th.SuspendHotkeys(r))));
     var io=new StackPanel(); io.Orientation=Orientation.Horizontal;
     var ex=Theme.MkBtn("Export…","Btn"); ex.Click+=(s,e)=>{ var d=new SaveFileDialog(); d.FileName="tray-helper.ini"; d.Filter="TrayHelper config|*.ini"; if(d.ShowDialog(this)==true){ try{ TrayHelper.SaveAll(); File.Copy(TrayHelper.IniPath,d.FileName,true); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } } };
-    var im=Theme.MkBtn("Import…","Btn"); im.Margin=new Thickness(8,0,0,0); im.Click+=(s,e)=>{ var d=new OpenFileDialog(); d.Filter="TrayHelper config|*.ini"; if(d.ShowDialog(this)==true){ try{ File.Copy(d.FileName,TrayHelper.IniPath,true); th.ReloadConfig(); Rebuild(); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } } };
+    var im=Theme.MkBtn("Import…","Btn"); im.Margin=new Thickness(8,0,0,0); im.Click+=(s,e)=>{ var d=new OpenFileDialog(); d.Filter="TrayHelper config|*.ini"; if(d.ShowDialog(this)==true){ try{ File.Copy(d.FileName,TrayHelper.IniPath,true); th.MergeReload(File.ReadAllText(TrayHelper.IniPath)); Rebuild(); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } } };
     io.Children.Add(ex); io.Children.Add(im);
     st.Children.Add(Row("Export / import",null,io));
     var lf=Theme.MkBtn("Open folder","Btn"); lf.Click+=(s,e)=>{ try{ Process.Start("explorer.exe","\""+TrayHelper.Dir+"\""); }catch{} };
     st.Children.Add(Row("Config folder",null,lf));
-    var up=Theme.MkBtn("Check now","Btn"); up.Click+=(s,e)=>MessageBox.Show(this,"Automatic updates are not available yet (on the roadmap). You are on "+TrayHelper.Version+".","TrayHelper");
-    st.Children.Add(Row("Check for updates",TrayHelper.Version,up));
+    st.Children.Add(Row("Updates",null,Segmented(new[]{"Auto","Notify","Off"},TrayHelper.UpdateMode,v=>{ TrayHelper.UpdateMode=v.ToLowerInvariant(); TrayHelper.SaveAll(); })));
+    st.Children.Add(UpdateRow());
     var rs=Theme.MkBtn("Reset…","Btn"); rs.Click+=(s,e)=>{ if(MessageBox.Show(this,"Reset TrayHelper's app list and settings to defaults?","TrayHelper",MessageBoxButton.YesNo)!=MessageBoxResult.Yes) return; try{ File.Copy(TrayHelper.IniPath,TrayHelper.IniPath+".bak",true); File.Delete(TrayHelper.IniPath); th.ReloadConfig(); Rebuild(); }catch(Exception er){ MessageBox.Show(this,er.Message,"TrayHelper"); } };
     st.Children.Add(Row("Reset to defaults",null,rs));
     var ah=Theme.T("Advanced",15,Theme.Text,FontWeights.SemiBold); ah.Margin=new Thickness(2,18,0,6); st.Children.Add(ah);
     st.Children.Add(Row("Open this window maximized","Off: restore last size and position",Labeled("",TrayHelper.OpenMaximized,v=>{ TrayHelper.OpenMaximized=v; TrayHelper.SaveAll(); })));
     st.Children.Add(Row("Hide Store apps on a hidden desktop",null,Labeled("",TrayHelper.UwpVd,v=>{ TrayHelper.UwpVd=v; TrayHelper.SaveAll(); })));
     return st; }
+  // Segmented buttons instead of a dropdown.
+  static UIElement Segmented(string[] opts,string cur,Action<string> set){ var bd=new Border(); bd.CornerRadius=new CornerRadius(4); bd.BorderBrush=Theme.Line; bd.BorderThickness=new Thickness(1); var sp=new StackPanel(); sp.Orientation=Orientation.Horizontal; bd.Child=sp; var btns=new List<Border>();
+    Action<string> paint=v=>{ foreach(var b in btns){ bool on=string.Equals((string)b.Tag,v,StringComparison.OrdinalIgnoreCase); b.Background=on?Theme.Accent:Brushes.Transparent; ((TextBlock)b.Child).Foreground=on?(Theme.Dark?Brushes.Black:Brushes.White):Theme.Text; } };
+    foreach(var o in opts){ var b=new Border(); b.Tag=o; b.Padding=new Thickness(12,4,12,4); b.Cursor=System.Windows.Input.Cursors.Hand; b.CornerRadius=new CornerRadius(3); b.Child=Theme.T(o,12.5,Theme.Text,FontWeights.Normal); var oo=o; b.MouseLeftButtonUp+=(s,e)=>{ set(oo); paint(oo); }; btns.Add(b); sp.Children.Add(b); }
+    paint(cur); return bd; }
+  Border UpdateRow(){ var sub=TrayHelper.UpdateStatus!=null?"v"+TrayHelper.Version+" · "+TrayHelper.UpdateStatus:"v"+TrayHelper.Version; var right=new StackPanel(); right.Orientation=Orientation.Horizontal;
+    if(TrayHelper.UpdateTag!=null){ var ins=Theme.MkBtn("Install v"+TrayHelper.UpdateTag,"Accent"); ins.Margin=new Thickness(0,0,8,0); ins.Click+=(s,e)=>{ th.InstallUpdate(); ins.IsEnabled=false; }; right.Children.Add(ins); }
+    var up=Theme.MkBtn("Check now","Btn"); right.Children.Add(up); var row=Row("Check for updates",sub,right); var lbl=((StackPanel)((Grid)row.Child).Children[0]).Children[1] as TextBlock;
+    up.Click+=(s,e)=>{ up.IsEnabled=false; if(lbl!=null) lbl.Text="v"+TrayHelper.Version+" · Checking…"; System.Threading.ThreadPool.QueueUserWorkItem(_=>{ TrayHelper.CheckUpdate(true); Dispatcher.BeginInvoke(new Action(()=>{ if(navGeneral.IsChecked==true) Rebuild(); })); }); };
+    return row; }
   static Border Row(string title,string sub,UIElement right){ var g=new Grid(); g.ColumnDefinitions.Add(new ColumnDefinition()); g.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
     var tx=new StackPanel(); tx.Children.Add(Theme.T(title,14,Theme.Text,FontWeights.Normal)); if(sub!=null){ var s=Theme.T(sub,12,Theme.Sub,FontWeights.Normal); tx.Children.Add(s); } tx.VerticalAlignment=VerticalAlignment.Center; g.Children.Add(tx); Grid.SetColumn(right,1); g.Children.Add(right); return Card(g); }
   UIElement AboutPage(){ var st=new StackPanel();
@@ -368,7 +385,7 @@ sealed class PickerWindow:Window{
     try{ var vi=FileVersionInfo.GetVersionInfo(exe); cd.Name=!string.IsNullOrEmpty(vi.FileDescription)?vi.FileDescription:vi.ProductName; }catch{} if(string.IsNullOrEmpty(cd.Name)) cd.Name=cd.Proc; return cd; }
   void Browse(){ var d=new OpenFileDialog(); d.Filter="Applications (*.exe)|*.exe"; d.Title="Choose an app"; if(d.ShowDialog(this)!=true) return; Done(FromExe(d.FileName)); }
   void Pick(){ var it=runList.SelectedItem as ListBoxItem; if(it==null) return; Done((Cand)it.Tag); }
-  void Done(Cand cd){ var a=new AppTarget(); a.WinTitle=""; a.Name=cd.Name??cd.Proc; a.ProcName=cd.Proc; a.WinClass=cd.Cls??""; a.ExePath=cd.Launch; a.IconExe=cd.Exe; a.Enabled=true; a.Preset=false; a.Detected=true;
+  void Done(Cand cd){ var a=new AppTarget(); a.WinTitle=string.Equals(cd.Proc,"ApplicationFrameHost",StringComparison.OrdinalIgnoreCase)?cd.Title:""; a.Name=cd.Name??cd.Proc; a.ProcName=cd.Proc; a.WinClass=cd.Cls??""; a.ExePath=cd.Launch; a.IconExe=cd.Exe; a.Enabled=true; a.Preset=false; a.Detected=true;
     Result=a; DialogResult=true; }
 }
 

@@ -29,7 +29,7 @@ static class Catalog{
   public static readonly string[] TrayButQuits={"Cursor","Figma","Code","Windsurf","Obsidian","Notion","olk"};
   public sealed class Found{ public Preset P; public bool Ok; public string Launch, Icon; }
   public static List<Found> DetectAll(){ var r=new List<Found>(); foreach(var p in All){ var f=new Found(); f.P=p; try{ f.Ok=Detect(p,out f.Launch,out f.Icon); }catch{} r.Add(f); } return r; }
-  static string AppxRoot(string prefix){ try{
+  internal static string AppxRoot(string prefix){ try{
       using(var k=Registry.CurrentUser.OpenSubKey(@"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages")){
         if(k==null) return null; string best=null, root=null;
         foreach(var n in k.GetSubKeyNames()) if(n.StartsWith(prefix,StringComparison.OrdinalIgnoreCase)&&(best==null||string.CompareOrdinal(n,best)>0)){
@@ -48,9 +48,13 @@ static class Catalog{
     foreach(var f in found){ var p=f.P;
       var a=apps.Find(x=>(x.Id!=null&&x.Id==p.Id)||string.Equals(x.Name,p.Name,StringComparison.OrdinalIgnoreCase)||(p.OldName!=null&&string.Equals(x.Name,p.OldName,StringComparison.OrdinalIgnoreCase)));
       if(a==null){ if(!f.Ok) continue; a=new AppTarget(); a.ExePath=f.Launch; a.Enabled=p.DefaultOn; apps.Add(a); TrayHelper.Log("catalog: detected "+p.Name); }
-      a.Id=p.Id; a.Name=p.Name; a.Preset=true; a.Detected=f.Ok; a.Note=p.Note; a.NativeTray=p.NativeTray; a.Native=p.Native; a.Hint=p.Hint; a.SettingsKeys=p.SettingsKeys; a.CtrlQ=a.CtrlQ||p.CtrlQ;
+      a.Id=p.Id; a.Name=p.Name; a.Preset=true; a.Detected=f.Ok; a.Note=p.Note; a.NativeTray=p.NativeTray; a.Native=p.Native||a.UserNative; a.Hint=p.Hint; a.SettingsKeys=p.SettingsKeys; a.CtrlQ=a.CtrlQ||p.CtrlQ;
       a.ProcName=p.ProcName; a.WinClass=p.WinClass; a.WinTitle=p.WinTitle; if(a.Native) a.Enabled=false;
       if(f.Icon!=null) a.IconExe=f.Icon; if(string.IsNullOrEmpty(a.ExePath)&&f.Launch!=null) a.ExePath=f.Launch; }
-    foreach(var a in apps) if(!a.Preset){ if(a.IconExe==null&&a.ExePath!=null&&File.Exists(a.ExePath)) a.IconExe=a.ExePath; if(a.IconExe==null) a.IconExe=RunningExe(a.ProcName); }
+    foreach(var a in apps) if(!a.Preset){
+      // Hand-written or stale Store paths (...\WindowsApps\Pkg_1.2.3_x64__id\app.exe): switch to the version-independent shell:AppsFolder\AUMID.
+      string aumid, ic; if(a.ExePath!=null&&a.ExePath.IndexOf(@"\WindowsApps\",StringComparison.OrdinalIgnoreCase)>=0&&Pkg.FromWindowsAppsPath(a.ExePath,out aumid,out ic)){ TrayHelper.Log(a.Name+": launch path "+a.ExePath+" -> shell:AppsFolder\\"+aumid); a.ExePath=@"shell:AppsFolder\"+aumid; if(ic!=null) a.IconExe=ic; }
+      if(a.IconExe==null&&a.ExePath!=null&&a.ExePath.StartsWith(@"shell:AppsFolder\",StringComparison.OrdinalIgnoreCase)){ try{ a.IconExe=Pkg.LogoForAumid(a.ExePath.Substring(17)); }catch{} }
+      if(a.IconExe==null&&a.ExePath!=null&&File.Exists(a.ExePath)) a.IconExe=a.ExePath; if(a.IconExe==null) a.IconExe=RunningExe(a.ProcName); }
   }
 }
