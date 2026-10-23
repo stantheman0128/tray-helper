@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2
+- Fix: apps that hide their own window (Typeless, ChatGPT…) could pop up after a TrayHelper restart or Exit; TrayHelper now only restores windows it hid itself
+- Fix: Store apps hidden on the hidden desktop could still show a taskbar button when the taskbar shows windows from all desktops
+- Fix: when an app can't be hidden, Alt+F4 now really closes it (the swallowed Alt no longer puts the app into menu mode)
+- `--test` mode for an isolated test instance (own config, no autostart, no built-in app list)
+
 ## 0.7.1
 - Per-user installer and uninstaller (no admin): installs to %LOCALAPPDATA%\TrayHelper, keeps your settings, restores hidden windows on uninstall
 - Code-signing script and file version info (prep for fewer antivirus false positives)

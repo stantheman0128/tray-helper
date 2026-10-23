@@ -187,7 +187,7 @@ partial class TrayHelper{
   void PlaceFlyout(){ if(flyout==null) return; var wa=SystemParameters.WorkArea; flyout.Left=wa.Right-flyout.ActualWidth; flyout.Top=wa.Bottom-flyout.ActualHeight; }
   public void ShowSettings(){
     Theme.Init(); if(flyout!=null) flyout.Hide();
-    try{ Catalog.Merge(Apps); }catch{}
+    if(!TestMode){ try{ Catalog.Merge(Apps); }catch{} }
     if(settingsWin==null){ settingsWin=new SettingsWindow(this); Interop(settingsWin); }
     settingsWin.Rebuild(); bool wasVis=settingsWin.IsVisible; if(!wasVis){ settingsWin.PlaceForOpen(); } settingsWin.Show(); if(wasVis&&settingsWin.WindowState==WindowState.Minimized) settingsWin.WindowState=OpenMaximized||WinMax?WindowState.Maximized:WindowState.Normal; settingsWin.Activate();
   }
@@ -214,7 +214,7 @@ partial class TrayHelper{
   const string RunKey=@"Software\Microsoft\Windows\CurrentVersion\Run";
   public static bool StartWithWindows{
     get{ try{ using(var k=Registry.CurrentUser.OpenSubKey(RunKey)) return k!=null&&k.GetValue("TrayHelper")!=null; }catch{ return false; } }
-    set{ try{ using(var k=Registry.CurrentUser.CreateSubKey(RunKey)){ if(value) k.SetValue("TrayHelper","\""+System.Windows.Forms.Application.ExecutablePath+"\""+(StartDelay>0?" --delay "+StartDelay:"")); else k.DeleteValue("TrayHelper",false); } Log("startWithWindows="+value); }catch(Exception ex){ Log("run key "+ex.Message); } } }
+    set{ if(TestMode) return; try{ using(var k=Registry.CurrentUser.CreateSubKey(RunKey)){ if(value) k.SetValue("TrayHelper","\""+System.Windows.Forms.Application.ExecutablePath+"\""+(StartDelay>0?" --delay "+StartDelay:"")); else k.DeleteValue("TrayHelper",false); } Log("startWithWindows="+value); }catch(Exception ex){ Log("run key "+ex.Message); } } }
 }
 
 sealed class SettingsWindow:Window{
