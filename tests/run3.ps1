@@ -1,4 +1,4 @@
-# Test windows are TopMost so Stan's maximized windows can't cover their X button.
+# Test windows are TopMost so other maximized windows can't cover their X button.
 # Usage (on the PC): powershell -ExecutionPolicy Bypass -File tests\run3.ps1   (0.9 multi-window; $env:TH_SRC to test a build outside dist\)
 $ErrorActionPreference = 'Continue'
 $TD = Join-Path $env:TEMP ('th-test-' + [DateTime]::Now.ToString('HHmmss')); $here = Split-Path -Parent $MyInvocation.MyCommand.Path
