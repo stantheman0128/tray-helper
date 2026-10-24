@@ -342,12 +342,18 @@ sealed class SettingsWindow:Window{
       if(line.StartsWith("# ")) t=Theme.T(line.Substring(2),15,Theme.Text,FontWeights.SemiBold); else if(line.StartsWith("## ")){ t=Theme.T(line.Substring(3),13.5,Theme.Text,FontWeights.SemiBold); t.Margin=new Thickness(0,12,0,0); }
       else{ t=Theme.T("•  "+line.TrimStart('-',' '),12.5,Theme.Sub,FontWeights.Normal); t.Margin=new Thickness(0,4,0,0); } t.TextWrapping=TextWrapping.Wrap; rm.Children.Add(t); }
     st.Children.Add(Card(rm));
-    var gif=new[]{Path.Combine(TrayHelper.Dir,"demo.gif"),Path.Combine(TrayHelper.Dir,"assets","demo.gif"),Path.Combine(TrayHelper.Dir,"..","assets","demo.gif")}.FirstOrDefault(File.Exists);
     var demo=new StackPanel(); demo.Children.Add(Theme.T("Demo",15,Theme.Text,FontWeights.SemiBold));
-    if(gif!=null){ try{ var pb=new System.Windows.Forms.PictureBox(); pb.SizeMode=System.Windows.Forms.PictureBoxSizeMode.Zoom; pb.Image=System.Drawing.Image.FromFile(gif); var host=new System.Windows.Forms.Integration.WindowsFormsHost(); host.Child=pb; host.Height=280; host.Margin=new Thickness(0,8,0,0); demo.Children.Add(host); }catch{ gif=null; } }
-    if(gif==null){ var ph=new Border(); ph.Height=160; ph.Margin=new Thickness(0,8,0,0); ph.CornerRadius=new CornerRadius(6); ph.BorderBrush=Theme.Line; ph.BorderThickness=new Thickness(1); var pt=Theme.T("Demo GIF coming soon (assets\\demo.gif)",13,Theme.Sub,FontWeights.Normal); pt.HorizontalAlignment=HorizontalAlignment.Center; ph.Child=pt; demo.Children.Add(ph); }
+    var demSub=Theme.T("Short clips of close-to-tray in action.",12,Theme.Sub,FontWeights.Normal); demSub.Margin=new Thickness(0,2,0,0); demo.Children.Add(demSub);
+    var clips=new[]{ new[]{"demo.gif","Overview"}, new[]{"demo-enable.gif","Enable & hide to tray"}, new[]{"demo-cursor.gif","Works for Cursor"}, new[]{"demo-excel.gif","Any app (Excel)"}, new[]{"demo-tray-menu.gif","Tray menu"} };
+    int shown=0;
+    foreach(var c in clips){ var path=FindDemoGif(c[0]); if(path==null) continue;
+      try{ var block=new StackPanel(); block.Margin=new Thickness(0,10,0,0); block.Children.Add(Theme.T(c[1],13,Theme.Text,FontWeights.SemiBold));
+        var pb=new System.Windows.Forms.PictureBox(); pb.SizeMode=System.Windows.Forms.PictureBoxSizeMode.Zoom; pb.Image=System.Drawing.Image.FromFile(path);
+        var host=new System.Windows.Forms.Integration.WindowsFormsHost(); host.Child=pb; host.Height=shown==0?280:220; host.Margin=new Thickness(0,6,0,0); block.Children.Add(host); demo.Children.Add(block); shown++; }catch{} }
+    if(shown==0){ var ph=new Border(); ph.Height=160; ph.Margin=new Thickness(0,8,0,0); ph.CornerRadius=new CornerRadius(6); ph.BorderBrush=Theme.Line; ph.BorderThickness=new Thickness(1); var pt=Theme.T("Demo GIF coming soon (assets\\demo.gif)",13,Theme.Sub,FontWeights.Normal); pt.HorizontalAlignment=HorizontalAlignment.Center; ph.Child=pt; demo.Children.Add(ph); }
     var dc=Card(demo); dc.Margin=new Thickness(0,8,0,0); st.Children.Add(dc);
     return st; }
+  static string FindDemoGif(string name){ return new[]{Path.Combine(TrayHelper.Dir,name),Path.Combine(TrayHelper.Dir,"assets",name),Path.Combine(TrayHelper.Dir,"..","assets",name)}.FirstOrDefault(File.Exists); }
   void AddApp(){ var p=new PickerWindow(); p.Owner=this; if(p.ShowDialog()==true&&p.Result!=null){
       if(TrayHelper.Apps.Any(x=>string.Equals(x.Name,p.Result.Name,StringComparison.OrdinalIgnoreCase))){ MessageBox.Show(this,p.Result.Name+" is already managed.","TrayHelper"); return; }
       th.AddApp(p.Result); Rebuild(); } }

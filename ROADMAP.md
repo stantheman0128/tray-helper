@@ -14,7 +14,7 @@ Current stage: **MVP** (speed over polish).
 ## Next
 - Code signing: script ready (`installer\sign.ps1`); needs a certificate. Sign both exes before publishing releases.
 - Hosted known-apps manifest (app → first version with native tray support → where the setting is), so native detection doesn't rely on the tray-icon heuristic alone.
-- Demo GIF (`assets/demo.gif`, shown on the About page). Not recorded, to avoid capturing private screens.
+- ~~Demo GIF~~ (`assets/demo.gif` + short clips on the About page and README; private bits blurred).
 
 ## Notes
 - Keyboard interception: Alt+F4 is always intercepted for apps with close-to-tray on. Ctrl+Q / Ctrl+W are intercepted only when the app's main window is in the foreground, and only when enabled per app (`InterceptCtrlQ=true` / `InterceptCtrlW=true`). Ctrl+Q is on by default for Thunderbird.

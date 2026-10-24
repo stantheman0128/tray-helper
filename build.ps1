@@ -12,6 +12,9 @@ $ico = Join-Path $here 'assets\app.ico'; $png = Join-Path $here 'assets\logo.png
 & "$fw\csc.exe" /nologo /codepage:65001 /target:winexe /optimize+ "/out:$out" "/win32icon:$ico" "/resource:$ico,app.ico" "/resource:$png,logo.png" "/resource:$(Join-Path $here 'CHANGELOG.md'),CHANGELOG.md" $refs (Join-Path $here 'TrayHelper.cs') (Join-Path $here 'Catalog.cs') (Join-Path $here 'Ui.cs') (Join-Path $here 'Scanner.cs') (Join-Path $here 'Extras.cs')
 if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE)" }
 $vda = Join-Path $here 'assets\VirtualDesktopAccessor.dll'; if (Test-Path $vda) { Copy-Item $vda (Join-Path $here 'dist') -Force -ErrorAction SilentlyContinue }
+$assetsDir = Join-Path $here 'dist\assets'; New-Item -ItemType Directory -Force $assetsDir | Out-Null
+Get-ChildItem (Join-Path $here 'assets') -Filter '*.gif' -ErrorAction SilentlyContinue | % { Copy-Item $_.FullName $assetsDir -Force }
+
 Write-Host "Built $out"
 # Setup: one exe with TrayHelper.exe + the DLL embedded (per-user, no admin).
 $setup = Join-Path $here 'dist\TrayHelper-Setup.exe'

@@ -7,6 +7,8 @@ $tmp = Join-Path $env:TEMP 'th-build-new.ps1'
 if ($LASTEXITCODE -ne 0) { throw 'build failed' }
 $d = Join-Path $here 'dist'
 Get-ChildItem (Join-Path $here 'assets') -Filter *.dll -ErrorAction SilentlyContinue | % { Copy-Item $_.FullName $d -Force -ErrorAction SilentlyContinue }
+$assetsDir = Join-Path $d 'assets'; New-Item -ItemType Directory -Force $assetsDir | Out-Null
+Get-ChildItem (Join-Path $here 'assets') -Filter '*.gif' -ErrorAction SilentlyContinue | % { Copy-Item $_.FullName $assetsDir -Force }
 $old = Get-CimInstance Win32_Process -Filter "Name='TrayHelper.exe'" | ? { $_.ExecutablePath -eq (Join-Path $d 'TrayHelper.exe') }
 Remove-Item (Join-Path $d 'TrayHelper.old.exe') -ErrorAction SilentlyContinue
 Rename-Item (Join-Path $d 'TrayHelper.exe') 'TrayHelper.old.exe'

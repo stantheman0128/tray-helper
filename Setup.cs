@@ -3,10 +3,10 @@
 //   TrayHelper-Setup.exe --uninstall     restore hidden windows, remove autostart, Start menu entry and files
 //   --silent  --dir <path>  --no-run-key  --no-start  --no-migrate  --test (talks to a --test instance, touches no registry)
 using System; using System.Diagnostics; using System.IO; using System.Reflection; using System.Runtime.InteropServices; using System.Text; using System.Threading; using System.Windows.Forms; using Microsoft.Win32;
-[assembly: AssemblyTitle("TrayHelper Setup")] [assembly: AssemblyProduct("TrayHelper Setup")] [assembly: AssemblyDescription("Installs TrayHelper for the current user")] [assembly: AssemblyCompany("Stan Shih")] [assembly: AssemblyCopyright("MIT License")] [assembly: AssemblyVersion("0.9.0.0")] [assembly: AssemblyFileVersion("0.9.0.0")]
+[assembly: AssemblyTitle("TrayHelper Setup")] [assembly: AssemblyProduct("TrayHelper Setup")] [assembly: AssemblyDescription("Installs TrayHelper for the current user")] [assembly: AssemblyCompany("Stan Shih")] [assembly: AssemblyCopyright("MIT License")] [assembly: AssemblyVersion("0.9.1.0")] [assembly: AssemblyFileVersion("0.9.1.0")]
 
 static class Setup{
-  const string Ver="0.9.0", RunKey=@"Software\Microsoft\Windows\CurrentVersion\Run", UninstKey=@"Software\Microsoft\Windows\CurrentVersion\Uninstall\TrayHelper";
+  const string Ver="0.9.1", RunKey=@"Software\Microsoft\Windows\CurrentVersion\Run", UninstKey=@"Software\Microsoft\Windows\CurrentVersion\Uninstall\TrayHelper";
   static bool silent, test, noRun, noStart, noMigrate; static string dir; static StreamWriter log;
   [DllImport("user32",CharSet=CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr p,IntPtr a,string c,string t);
   [DllImport("user32")] static extern bool PostMessage(IntPtr h,uint m,IntPtr w,IntPtr l);

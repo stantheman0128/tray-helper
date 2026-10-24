@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
-- Docs: demo video in the README (docs/demo/tray-helper-demo.mp4, English narration, burned-in English + Traditional Chinese subtitles; SRT files alongside)
+## 0.9.1
+- About → Demo: short GIF clips (overview, enable & hide to tray, Cursor, Excel, tray menu) instead of "coming soon"
+- README shows an inline demo GIF (GitHub can play GIFs; full subtitled MP4 remains as a download)
 
 ## 0.9.0
 - Multi-window apps work like macOS: X / Alt+F4 on one of several open windows closes it; the last one goes to the tray

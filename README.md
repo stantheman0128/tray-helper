@@ -6,9 +6,9 @@ TrayHelper is a small Windows 10/11 tray utility. For apps that quit when you pr
 
 Unofficial, MIT-licensed, per-user (no admin).
 
-[![TrayHelper demo](docs/demo/poster.png)](docs/demo/tray-helper-demo.mp4)
+![TrayHelper demo](docs/demo/demo.gif)
 
-▶ [Watch the demo (MP4, with subtitles)](docs/demo/tray-helper-demo.mp4) · 73 s, English narration with English + 繁體中文 subtitles ([en.srt](docs/demo/en.srt), [zh-TW.srt](docs/demo/zh-TW.srt))
+▶ [Full demo (MP4, with subtitles)](docs/demo/tray-helper-demo.mp4) · 73 s, English narration with English + 繁體中文 subtitles ([en.srt](docs/demo/en.srt), [zh-TW.srt](docs/demo/zh-TW.srt)) · short clips: [enable](docs/demo/demo-enable.gif) · [Cursor](docs/demo/demo-cursor.gif) · [Excel](docs/demo/demo-excel.gif) · [tray menu](docs/demo/demo-tray-menu.gif)
 
 ## Features
 - **Close to tray** for any app: X button, Alt+F4, and optionally Ctrl+Q / Ctrl+W.

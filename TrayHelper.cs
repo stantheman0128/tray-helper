@@ -3,7 +3,7 @@
 using System; using System.Linq; using System.Collections.Generic; using System.Diagnostics; using System.Drawing; using System.IO; using System.Reflection;
 using System.Runtime.InteropServices; using System.Text; using System.Threading; using System.Windows.Forms;
 
-[assembly: AssemblyTitle("TrayHelper")] [assembly: AssemblyProduct("TrayHelper")] [assembly: AssemblyDescription("Close the window, keep the app")] [assembly: AssemblyCompany("Stan Shih")] [assembly: AssemblyCopyright("MIT License")] [assembly: AssemblyVersion("0.9.0.0")] [assembly: AssemblyFileVersion("0.9.0.0")]
+[assembly: AssemblyTitle("TrayHelper")] [assembly: AssemblyProduct("TrayHelper")] [assembly: AssemblyDescription("Close the window, keep the app")] [assembly: AssemblyCompany("Stan Shih")] [assembly: AssemblyCopyright("MIT License")] [assembly: AssemblyVersion("0.9.1.0")] [assembly: AssemblyFileVersion("0.9.1.0")]
 
 sealed class CloseSnap{ public readonly int l,t,r,b; public CloseSnap(int l,int t,int r,int b){ this.l=l; this.t=t; this.r=r; this.b=b; } }
 
@@ -28,7 +28,7 @@ sealed class AppTarget{ public bool geoLogged; public List<HidW> hid=new List<Hi
 }
 
 partial class TrayHelper : ApplicationContext {
-  internal const string Version="0.9.0";
+  internal const string Version="0.9.1";
   internal static bool TestMode; static string MsgCaption{ get{ return TestMode?"TrayHelper.test.msg":"TrayHelper.msg"; } }
   internal static string HkRestoreAll="Ctrl+Alt+Up", HkSendToTray="Ctrl+Alt+Down"; internal static bool UwpVd=true;
   internal static List<AppTarget> Temps=new List<AppTarget>();
