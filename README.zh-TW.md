@@ -58,3 +58,7 @@ powershell -ExecutionPolicy Bypass -File tests\run.ps1      # 以獨立的 --tes
 ```
 
 第三方元件：[VirtualDesktopAccessor](https://github.com/Ciantic/VirtualDesktopAccessor)（MIT），見 THIRD-PARTY.md。
+
+## 維護者
+
+由 [施博瀚（Stan Shih / Po-Han Shih）](https://stan-shih.com/zh/about)維護，台北的 AI 產品開發者。[其他公開軟體與工具](https://stan-shih.com/software#tray-helper)。
