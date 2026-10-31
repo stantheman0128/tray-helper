@@ -76,3 +76,7 @@ powershell -ExecutionPolicy Bypass -File tests\run.ps1      # automated tests on
 To publish a release from the box, run `tools/release.sh <version>`, which uploads the exe, setup and `.sha256` files.
 
 Third-party: [VirtualDesktopAccessor](https://github.com/Ciantic/VirtualDesktopAccessor) (MIT), see THIRD-PARTY.md.
+
+## Maintainer
+
+Maintained by [Stan Shih (施博瀚 / Po-Han Shih)](https://stan-shih.com/), an AI product developer in Taipei, Taiwan. [More software and tools](https://stan-shih.com/software#tray-helper).
